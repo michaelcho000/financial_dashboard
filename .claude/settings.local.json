@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(npm:*)",
+      "Bash(npx vite:*)",
+      "Bash(./node_modules/.bin/vite:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_click",
+      "Bash(grep:*)",
+      "mcp__playwright__browser_snapshot",
+      "Bash(npx tsc:*)",
+      "mcp__github__search_repositories",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

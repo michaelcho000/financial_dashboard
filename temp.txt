@@ -1,0 +1,295 @@
+import { AccountCategory, DB, Financials, SystemSettings, Tenant, User } from '../types';
+
+const DB_KEY = 'financial_app_db';
+
+const initialFinancials: Financials = {
+    accounts: {
+        revenue: [
+            { id: 'rev-1', name: '카드매출', category: AccountCategory.REVENUE, group: '비급??, isDeletable: true, entryType: 'transaction' },
+            { id: 'rev-2', name: '?�금매출', category: AccountCategory.REVENUE, group: '비급??, isDeletable: true, entryType: 'transaction' },
+            { id: 'rev-4', name: '본인부?�금', category: AccountCategory.REVENUE, group: '보험급여', isDeletable: true, entryType: 'transaction' },
+        ],
+        cogs: [
+            { id: 'cogs-1', name: '?�료�?A', category: AccountCategory.COGS, group: '?�재료비', isDeletable: true, entryType: 'transaction' },
+        ],
+        sgaFixed: [
+            { id: 'sga-fix-1', name: '직원급여', category: AccountCategory.SGA_FIXED, group: '?�건�?, isDeletable: false, entryType: 'manual' },
+            { id: 'sga-fix-2', name: '4?�보험', category: AccountCategory.SGA_FIXED, group: '?�건�?, isDeletable: false, entryType: 'manual' },
+            { id: 'sga-fix-3', name: '???�차�?, category: AccountCategory.SGA_FIXED, group: '지급임차료', isDeletable: false, entryType: 'manual' },
+        ],
+        sgaVariable: [
+            { id: 'sga-var-1', name: '복리?�생�?, category: AccountCategory.SGA_VARIABLE, group: '?�건�?, isDeletable: false, entryType: 'transaction' },
+            { id: 'sga-var-2', name: '마�??�비', category: AccountCategory.SGA_VARIABLE, group: '기�?', isDeletable: true, entryType: 'transaction' },
+        ],
+    },
+    accountGroups: {
+        revenue: ['비급??, '보험급여'],
+        cogs: ['?�재료비'],
+        sga: ['?�건�?, '지급임차료', '기�?']
+    },
+    transactionData: {
+        '2025-08': {
+            'rev-1': [{ id: 't-rev-1', description: '8??카드 매출', amount: 250000000 }],
+            'cogs-1': [{ id: 't-cogs-1', description: 'A?�체 발주', amount: 13100000 }],
+        },
+        '2025-07': {
+            'rev-1': [{ id: 't-rev-1-jul', description: '7??카드 매출', amount: 300000000 }],
+        },
+    },
+    manualData: {},
+    fixedCostLedger: [
+        { id: 'fcl-1', accountId: 'sga-fix-1', costType: 'OPERATING_SERVICE', serviceName: '직원급여', vendor: '?��?', monthlyCost: 80000000, paymentDate: '매월 10?? },
+        { id: 'fcl-2', accountId: 'sga-fix-2', costType: 'OPERATING_SERVICE', serviceName: '4?�보험', vendor: '?��?', monthlyCost: 12000000, paymentDate: '매월 10?? },
+        { id: 'fcl-3', accountId: 'sga-fix-3', costType: 'OPERATING_SERVICE', serviceName: '???�차�?, vendor: '건물�?, monthlyCost: 15000000, paymentDate: '매월 1?? },
+    ]
+};
+
+const initialDb: DB = {
+    users: [
+        { id: 'superadmin', password: 'adminpass', name: 'Super Admin', email: 'admin@system.com', role: 'superAdmin' },
+        { id: 'user1', password: 'userpass', name: '김?�당', email: 'user1@hospital.com', role: 'generalAdmin', tenantIds: ['tenant-1'] },
+    ],
+    tenants: [
+        { id: 'tenant-1', name: '강남 A ?��?�? },
+        { id: 'tenant-2', name: '부??B ?�원' }
+    ],
+    financialData: {
+        'tenant-1': JSON.parse(JSON.stringify(initialFinancials)),
+        'tenant-2': JSON.parse(JSON.stringify(initialFinancials)), // Start with same template
+    }
+};
+
+// initialFinancials�?기반?�로 기본 ?�스???�정???�성
+function createDefaultSystemSettings(): SystemSettings {
+    return {
+        tenantTemplate: {
+            accountGroups: JSON.parse(JSON.stringify(initialFinancials.accountGroups)),
+            accounts: JSON.parse(JSON.stringify(initialFinancials.accounts)),
+            fixedCostLedger: JSON.parse(JSON.stringify(initialFinancials.fixedCostLedger)),
+            initialMonths: ['2025-08'], // 기본?�로 ?�공????            manualDataDefaults: {},
+            transactionDataDefaults: {}
+        },
+        branding: {
+            systemName: '병원 ?�무 관�??�스??
+        }
+    };
+}
+
+// ?�플릿을 ?�용?�여 ?�로??Financials 객체 ?�성
+function createFinancialsFromTemplate(template: SystemSettings['tenantTemplate']): Financials {
+    return {
+        accounts: JSON.parse(JSON.stringify(template.accounts)),
+        accountGroups: JSON.parse(JSON.stringify(template.accountGroups)),
+        transactionData: template.transactionDataDefaults ? JSON.parse(JSON.stringify(template.transactionDataDefaults)) : {},
+        manualData: template.manualDataDefaults ? JSON.parse(JSON.stringify(template.manualDataDefaults)) : {},
+        fixedCostLedger: JSON.parse(JSON.stringify(template.fixedCostLedger))
+    };
+}
+
+class DatabaseService {
+    private db: DB;
+
+    constructor() {
+        this.db = this.loadDB();
+        this.initializeSettings();
+    }
+
+    private loadDB(): DB {
+        if (typeof window === 'undefined') {
+            return initialDb;
+        }
+        try {
+            const serializedState = localStorage.getItem(DB_KEY);
+            if (serializedState === null) {
+                this.saveDB(initialDb);
+                return initialDb;
+            }
+            return JSON.parse(serializedState);
+        } catch (error) {
+            console.warn(`Error reading localStorage key ??{DB_KEY}??`, error);
+            return initialDb;
+        }
+    }
+
+    private saveDB(db: DB) {
+        if (typeof window !== 'undefined') {
+            try {
+                const serializedState = JSON.stringify(db);
+                localStorage.setItem(DB_KEY, serializedState);
+            } catch (error) {
+                console.error('Error saving state to localStorage:', error);
+            }
+        }
+    }
+
+    private initializeSettings() {
+        if (!this.db.settings) {
+            this.db.settings = createDefaultSystemSettings();
+            this.saveDB(this.db);
+        }
+    }
+    
+    public init() {
+      // The constructor already handles initialization.
+    }
+
+    public login(id: string, password?: string): User | null {
+        const user = this.db.users.find(u => u.id === id && u.password === password);
+        return user ? { id: user.id, name: user.name, email: user.email, role: user.role, tenantIds: user.tenantIds } : null;
+    }
+
+    public getFinancials(tenantId: string): Financials {
+        if (!this.db.financialData[tenantId]) {
+            // Create financial data for a new tenant if it doesn't exist
+            this.db.financialData[tenantId] = JSON.parse(JSON.stringify(initialFinancials));
+            this.saveDB(this.db);
+        }
+        return this.db.financialData[tenantId];
+    }
+
+    public saveFinancials(tenantId: string, financials: Financials): void {
+        this.db.financialData[tenantId] = financials;
+        this.saveDB(this.db);
+    }
+    
+    public getUsers(): User[] {
+        return this.db.users.map(({password, ...user}) => user); // Exclude password
+    }
+    
+    public getTenants(): Tenant[] {
+        return this.db.tenants;
+    }
+
+    public getTenant(tenantId: string): Tenant | null {
+        return this.db.tenants.find(t => t.id === tenantId) || null;
+    }
+    
+    public addUser(user: User): boolean {
+        if (this.db.users.some(u => u.id === user.id || u.email === user.email)) {
+            return false; // User already exists
+        }
+        this.db.users.push(user);
+        this.saveDB(this.db);
+        return true;
+    }
+
+    public updateUser(userId: string, updates: Partial<User>): boolean {
+        const userIndex = this.db.users.findIndex(u => u.id === userId);
+        if (userIndex === -1) {
+            return false; // User not found
+        }
+        this.db.users[userIndex] = { ...this.db.users[userIndex], ...updates };
+        this.saveDB(this.db);
+        return true;
+    }
+
+    public addTenant(name: string): string | null {
+        // Generate automatic UUID for tenant ID
+        const newTenantId = crypto.randomUUID();
+
+        // Check if name already exists (optional safeguard)
+        if (this.db.tenants.some(t => t.name === name)) {
+            return null; // Tenant with same name already exists
+        }
+
+        const newTenant: Tenant = {
+            id: newTenantId,
+            name: name
+        };
+
+        this.db.tenants.push(newTenant);
+        // Initialize financial data for the new tenant using current template
+        this.db.financialData[newTenantId] = createFinancialsFromTemplate(this.db.settings!.tenantTemplate);
+        this.saveDB(this.db);
+        return newTenantId; // Return the generated ID
+    }
+
+    public updateTenant(tenantId: string, updates: Partial<Tenant>): boolean {
+        const tenantIndex = this.db.tenants.findIndex(t => t.id === tenantId);
+        if (tenantIndex === -1) {
+            return false; // Tenant not found
+        }
+        this.db.tenants[tenantIndex] = { ...this.db.tenants[tenantIndex], ...updates };
+        this.saveDB(this.db);
+        return true;
+    }
+
+    public deleteTenant(tenantId: string): boolean {
+        const tenantIndex = this.db.tenants.findIndex(t => t.id === tenantId);
+        if (tenantIndex === -1) {
+            return false; // Tenant not found
+        }
+        // Remove tenant from tenants array
+        this.db.tenants.splice(tenantIndex, 1);
+        // Remove corresponding financial data
+        delete this.db.financialData[tenantId];
+        this.saveDB(this.db);
+        return true;
+    }
+
+    public deleteUser(userId: string): boolean {
+        const index = this.db.users.findIndex(u => u.id === userId);
+        if (index === -1) return false;
+
+        this.db.users.splice(index, 1);
+        this.saveDB(this.db);
+        return true;
+    }
+
+    public getUsersByTenantId(tenantId: string): User[] {
+        return this.db.users
+            .filter(user => user.tenantIds?.includes(tenantId))
+            .map(({password, ...user}) => user); // Exclude password
+    }
+
+    // Settings 관??메서?�들
+    public getSettings(): SystemSettings {
+        if (!this.db.settings) {
+            this.initializeSettings();
+        }
+        return this.db.settings!;
+    }
+
+    public saveSettings(settingsUpdates: Partial<SystemSettings>): boolean {
+        try {
+            if (!this.db.settings) {
+                this.db.settings = createDefaultSystemSettings();
+            }
+
+            // Deep merge settings
+            this.db.settings = {
+                ...this.db.settings,
+                ...settingsUpdates,
+                tenantTemplate: settingsUpdates.tenantTemplate ? {
+                    ...this.db.settings.tenantTemplate,
+                    ...settingsUpdates.tenantTemplate
+                } : this.db.settings.tenantTemplate
+            };
+
+            this.saveDB(this.db);
+            return true;
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            return false;
+        }
+    }
+
+    public resetSettingsToDefault(): boolean {
+        try {
+            this.db.settings = createDefaultSystemSettings();
+            this.saveDB(this.db);
+            return true;
+        } catch (error) {
+            console.error('Error resetting settings:', error);
+            return false;
+        }
+    }
+
+    // ?�플릿에???�로??Financials ?�성 (?�스?�용)
+    public createFinancialsFromCurrentTemplate(): Financials {
+        const settings = this.getSettings();
+        return createFinancialsFromTemplate(settings.tenantTemplate);
+    }
+}
+
+export default new DatabaseService();
