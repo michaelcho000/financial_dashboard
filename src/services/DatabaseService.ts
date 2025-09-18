@@ -4,7 +4,37 @@ const DB_KEY = 'financial_app_db';
 const DB_SCHEMA_VERSION = '1.0.0'; // DB 스키마 버전 (필드 구조 변경시에만 증가)
 const TEMPLATE_VERSION = '2.0.0'; // 템플릿 버전 (대표 계정 변경시 증가)
 
+// 구버전 → 신버전 계정 매핑 테이블
+const ACCOUNT_MIGRATION_MAP = {
+    // 매출 계정 매핑
+    'rev-1': 'rev-1', // 카드매출 → 비급여 일반수익
+    'rev-2': 'rev-2', // 현금매출 → 멤버십/패키지
+    'rev-4': 'rev-4', // 본인부담금 → 보험 본인부담금
+
+    // 매출원가 계정 매핑
+    'cogs-1': 'cogs-1', // 재료비 A → 시술 재료비
+
+    // 고정비 계정 매핑
+    'sga-fix-1': 'sga-fix-1', // 직원급여 → 관리직 인건비
+    'sga-fix-2': 'sga-fix-2', // 4대보험 → 4대보험료
+    'sga-fix-3': 'sga-fix-3', // 월 임차료 → 임차료
+
+    // 변동비 계정 매핑
+    'sga-var-1': 'sga-var-3', // 복리후생비 → 교육/복지비
+    'sga-var-2': 'sga-var-1', // 마케팅비 → 마케팅/광고비
+};
+
+// 그룹명 매핑 테이블
+const GROUP_MIGRATION_MAP = {
+    '비급여': '비급여 수익',
+    '보험급여': '보험 수익',
+    '원재료비': '시술 원가',
+    '지급임차료': '임차/관리',
+    '기타': '기타 비용'
+};
+
 const initialFinancials: Financials = {
+    templateVersion: TEMPLATE_VERSION,
     accounts: {
         revenue: [
             { id: 'rev-1', name: '비급여 일반수익', category: AccountCategory.REVENUE, group: '비급여 수익', isDeletable: true, entryType: 'transaction' },
@@ -67,8 +97,16 @@ const initialDb: DB = {
         { id: 'tenant-2', name: '부산 B 의원' }
     ],
     financialData: {
-        'tenant-1': JSON.parse(JSON.stringify(initialFinancials)),
-        'tenant-2': JSON.parse(JSON.stringify(initialFinancials)), // Start with same template
+        'tenant-1': (() => {
+            const data = JSON.parse(JSON.stringify(initialFinancials));
+            delete data.templateVersion; // 구버전 데이터로 시뮬레이션
+            return data;
+        })(),
+        'tenant-2': (() => {
+            const data = JSON.parse(JSON.stringify(initialFinancials));
+            delete data.templateVersion; // 구버전 데이터로 시뮬레이션
+            return data;
+        })()
     }
 };
 
@@ -93,6 +131,7 @@ function createDefaultSystemSettings(): SystemSettings {
 // 템플릿을 사용하여 새로운 Financials 객체 생성
 function createFinancialsFromTemplate(template: SystemSettings['tenantTemplate']): Financials {
     return {
+        templateVersion: template.version,
         accounts: JSON.parse(JSON.stringify(template.accounts)),
         accountGroups: JSON.parse(JSON.stringify(template.accountGroups)),
         transactionData: template.transactionDataDefaults ? JSON.parse(JSON.stringify(template.transactionDataDefaults)) : {},
@@ -184,11 +223,255 @@ class DatabaseService {
 
             console.log('Template migration completed. Hospital data preserved.');
             this.saveDB(this.db);
+
+            // 템플릿 업데이트 후 기존 병원 데이터 마이그레이션 실행
+            this.migrateAllTenantData();
         } else {
             console.log(`Template version ${currentTemplate.version} is up to date.`);
         }
     }
-    
+
+    // 모든 병원 데이터를 최신 템플릿 버전으로 마이그레이션
+    private migrateAllTenantData() {
+        console.log('Starting tenant data migration...');
+        let successCount = 0;
+        let failureCount = 0;
+
+        Object.keys(this.db.financialData).forEach(tenantId => {
+            try {
+                const migrated = this.migrateTenantData(tenantId);
+                if (migrated) {
+                    successCount++;
+                    console.log(`✅ Tenant ${tenantId} migrated successfully`);
+                } else {
+                    console.log(`ℹ️ Tenant ${tenantId} already up to date`);
+                }
+            } catch (error) {
+                failureCount++;
+                console.error(`❌ Failed to migrate tenant ${tenantId}:`, error);
+            }
+        });
+
+        console.log(`Migration completed: ${successCount} updated, ${failureCount} failed`);
+        if (failureCount > 0) {
+            console.warn('Some tenants failed to migrate. Check logs for details.');
+        }
+
+        // 💾 중요: 마이그레이션 결과를 localStorage에 저장
+        this.saveDB(this.db);
+    }
+
+    // 개별 병원 데이터 마이그레이션
+    private migrateTenantData(tenantId: string): boolean {
+        const financials = this.db.financialData[tenantId];
+        if (!financials) return false;
+
+        // 이미 최신 버전이면 스킵
+        if (financials.templateVersion === TEMPLATE_VERSION) {
+            return false;
+        }
+
+        console.log(`Migrating tenant ${tenantId} from version ${financials.templateVersion || 'unknown'}`);
+
+        // 백업 생성
+        this.createTenantBackup(tenantId, financials);
+
+        // 계정 데이터 마이그레이션
+        this.migrateAccounts(financials);
+
+        // 그룹 데이터 마이그레이션
+        this.migrateAccountGroups(financials);
+
+        // 고정비 레저 마이그레이션
+        this.migrateFixedCostLedger(financials);
+
+        // 버전 업데이트
+        financials.templateVersion = TEMPLATE_VERSION;
+
+        return true;
+    }
+
+    // 계정 데이터 마이그레이션 (매핑 테이블 사용)
+    private migrateAccounts(financials: Financials) {
+        const newTemplate = this.getSettings().tenantTemplate;
+
+        ['revenue', 'cogs', 'sgaFixed', 'sgaVariable'].forEach(category => {
+            const accounts = financials.accounts[category as keyof typeof financials.accounts];
+            const templateAccounts = newTemplate.accounts[category as keyof typeof newTemplate.accounts];
+
+            accounts.forEach(account => {
+                // 🔧 매핑 테이블을 사용하여 새 ID 찾기
+                const mappedId = ACCOUNT_MIGRATION_MAP[account.id as keyof typeof ACCOUNT_MIGRATION_MAP] || account.id;
+                const templateAccount = templateAccounts.find(ta => ta.id === mappedId);
+
+                if (templateAccount) {
+                    // 계정명과 그룹명을 템플릿 기준으로 업데이트
+                    account.name = templateAccount.name;
+                    account.group = templateAccount.group;
+                    console.log(`  ✅ Account updated: ${account.id} → ${templateAccount.name}`);
+                } else {
+                    console.log(`  ⚠️ Template account not found for: ${account.id} (mapped to ${mappedId})`);
+                }
+            });
+
+            // 🔧 새 템플릿에만 있는 계정들 추가
+            templateAccounts.forEach(templateAccount => {
+                const exists = accounts.find(acc => acc.id === templateAccount.id);
+                if (!exists) {
+                    accounts.push({...templateAccount});
+                    console.log(`  ➕ New account added: ${templateAccount.id} - ${templateAccount.name}`);
+                }
+            });
+        });
+    }
+
+    // 그룹 데이터 마이그레이션 (기존 커스텀 그룹 보존)
+    private migrateAccountGroups(financials: Financials) {
+        const newTemplate = this.getSettings().tenantTemplate;
+
+        // 🔧 기존 커스텀 그룹 보존하면서 새 템플릿 그룹 병합
+        ['revenue', 'cogs', 'sga'].forEach(category => {
+            const existingGroups = financials.accountGroups[category as keyof typeof financials.accountGroups] || [];
+            const templateGroups = newTemplate.accountGroups[category as keyof typeof newTemplate.accountGroups];
+
+            // 기존 그룹명을 매핑된 이름으로 업데이트
+            const updatedGroups = existingGroups.map(group =>
+                GROUP_MIGRATION_MAP[group as keyof typeof GROUP_MIGRATION_MAP] || group
+            );
+
+            // 중복 제거하고 새 템플릿 그룹 추가
+            const mergedGroups = [...new Set([...updatedGroups, ...templateGroups])];
+            financials.accountGroups[category as keyof typeof financials.accountGroups] = mergedGroups;
+
+            console.log(`  🔄 Groups updated for ${category}: ${mergedGroups.join(', ')}`);
+        });
+    }
+
+    // 고정비 레저 마이그레이션
+    private migrateFixedCostLedger(financials: Financials) {
+        const newTemplate = this.getSettings().tenantTemplate;
+
+        financials.fixedCostLedger.forEach(item => {
+            // 매핑된 템플릿 아이템 찾기
+            const templateItem = newTemplate.fixedCostLedger.find(ti => ti.accountId === item.accountId);
+            if (templateItem) {
+                // 서비스명을 템플릿 기준으로 업데이트
+                item.serviceName = templateItem.serviceName;
+            }
+        });
+
+        // 새 템플릿에서 추가된 고정비 항목이 있으면 추가
+        newTemplate.fixedCostLedger.forEach(templateItem => {
+            const exists = financials.fixedCostLedger.find(item => item.accountId === templateItem.accountId);
+            if (!exists) {
+                // 새로운 고정비 항목 추가
+                financials.fixedCostLedger.push({
+                    ...templateItem,
+                    id: `migrated-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+                });
+            }
+        });
+    }
+
+    // 병원 데이터 백업 생성
+    private createTenantBackup(tenantId: string, financials: Financials) {
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const backupKey = `${DB_KEY}_backup_${tenantId}_${timestamp}`;
+            const backupData = {
+                tenantId,
+                timestamp,
+                templateVersion: financials.templateVersion || 'unknown',
+                data: JSON.parse(JSON.stringify(financials))
+            };
+
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(backupKey, JSON.stringify(backupData));
+                console.log(`💾 Backup created for tenant ${tenantId}: ${backupKey}`);
+            }
+        } catch (error) {
+            console.error(`Failed to create backup for tenant ${tenantId}:`, error);
+        }
+    }
+
+    // 백업 목록 조회
+    public getBackups(): Array<{key: string, tenantId: string, timestamp: string, templateVersion: string}> {
+        if (typeof window === 'undefined') return [];
+
+        const backups: Array<{key: string, tenantId: string, timestamp: string, templateVersion: string}> = [];
+
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(`${DB_KEY}_backup_`)) {
+                try {
+                    const backupData = JSON.parse(localStorage.getItem(key) || '{}');
+                    backups.push({
+                        key,
+                        tenantId: backupData.tenantId,
+                        timestamp: backupData.timestamp,
+                        templateVersion: backupData.templateVersion
+                    });
+                } catch (error) {
+                    console.warn(`Invalid backup data in ${key}:`, error);
+                }
+            }
+        }
+
+        return backups.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    }
+
+    // 백업에서 병원 데이터 복구
+    public restoreFromBackup(backupKey: string): boolean {
+        try {
+            if (typeof window === 'undefined') return false;
+
+            const backupData = localStorage.getItem(backupKey);
+            if (!backupData) {
+                console.error(`Backup not found: ${backupKey}`);
+                return false;
+            }
+
+            const backup = JSON.parse(backupData);
+            this.db.financialData[backup.tenantId] = backup.data;
+            this.saveDB(this.db);
+
+            console.log(`✅ Restored tenant ${backup.tenantId} from backup ${backupKey}`);
+            return true;
+        } catch (error) {
+            console.error(`Failed to restore from backup ${backupKey}:`, error);
+            return false;
+        }
+    }
+
+    // 수동 마이그레이션 실행 (슈퍼관리자용)
+    public runManualMigration(): {success: number, failed: number, results: Array<{tenantId: string, status: string, error?: string}>} {
+        const results: Array<{tenantId: string, status: string, error?: string}> = [];
+        let success = 0;
+        let failed = 0;
+
+        Object.keys(this.db.financialData).forEach(tenantId => {
+            try {
+                const migrated = this.migrateTenantData(tenantId);
+                if (migrated) {
+                    success++;
+                    results.push({tenantId, status: 'migrated'});
+                } else {
+                    results.push({tenantId, status: 'already_up_to_date'});
+                }
+            } catch (error) {
+                failed++;
+                results.push({
+                    tenantId,
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        });
+
+        this.saveDB(this.db);
+        return {success, failed, results};
+    }
+
     public init() {
       // The constructor already handles initialization.
     }
@@ -200,8 +483,9 @@ class DatabaseService {
 
     public getFinancials(tenantId: string): Financials {
         if (!this.db.financialData[tenantId]) {
-            // Create financial data for a new tenant if it doesn't exist
-            this.db.financialData[tenantId] = JSON.parse(JSON.stringify(initialFinancials));
+            // 🔧 수정: 템플릿을 사용하여 신규 병원 데이터 생성
+            const settings = this.getSettings();
+            this.db.financialData[tenantId] = createFinancialsFromTemplate(settings.tenantTemplate);
             this.saveDB(this.db);
         }
         return this.db.financialData[tenantId];

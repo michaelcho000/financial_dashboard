@@ -137,6 +137,7 @@ export interface AuthContextType {
 }
 
 export interface Financials {
+    templateVersion?: string; // 이 병원 데이터가 기반한 템플릿 버전
     accounts: {
         revenue: Account[];
         cogs: Account[];

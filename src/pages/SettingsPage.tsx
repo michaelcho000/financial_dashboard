@@ -1,8 +1,25 @@
 import React, { useState } from 'react';
 import DataTemplateEditor from '../components/DataTemplateEditor';
+import DatabaseService from '../services/DatabaseService';
 
 const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'dataTemplate' | 'security' | 'notifications'>('dataTemplate');
+  const [migrationResults, setMigrationResults] = useState<any>(null);
+  const [isRunningMigration, setIsRunningMigration] = useState(false);
+
+  const runDataMigration = async () => {
+    setIsRunningMigration(true);
+    try {
+      const results = DatabaseService.runManualMigration();
+      setMigrationResults(results);
+      alert(`마이그레이션 완료: ${results.success}개 성공, ${results.failed}개 실패`);
+    } catch (error) {
+      console.error('Migration failed:', error);
+      alert('마이그레이션 중 오류가 발생했습니다.');
+    } finally {
+      setIsRunningMigration(false);
+    }
+  };
 
   const tabs = [
     { id: 'general' as const, label: '일반', disabled: true },
@@ -72,6 +89,72 @@ const SettingsPage: React.FC = () => {
             </div>
 
             <DataTemplateEditor />
+
+            {/* 마이그레이션 관리 섹션 */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h4 className="text-lg font-medium mb-4">기존 병원 데이터 마이그레이션</h4>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h5 className="text-sm font-medium text-amber-800">기존 병원 데이터 업데이트</h5>
+                    <div className="mt-1 text-sm text-amber-700">
+                      <p>템플릿을 변경한 후, 기존 병원들의 계정 구조를 새 템플릿에 맞춰 업데이트할 수 있습니다.</p>
+                      <p>마이그레이션 전 자동으로 백업이 생성되므로 안전합니다.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mb-4">
+                <button
+                  onClick={runDataMigration}
+                  disabled={isRunningMigration}
+                  className={`px-4 py-2 text-sm text-white rounded-md ${
+                    isRunningMigration
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-orange-600 hover:bg-orange-700'
+                  }`}
+                >
+                  {isRunningMigration ? '마이그레이션 실행 중...' : '기존 병원 데이터 마이그레이션 실행'}
+                </button>
+              </div>
+
+              {/* 마이그레이션 결과 표시 */}
+              {migrationResults && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-md">
+                  <h5 className="font-medium mb-2">마이그레이션 결과</h5>
+                  <div className="text-sm text-gray-600">
+                    <p>성공: {migrationResults.success}개, 실패: {migrationResults.failed}개</p>
+                    {migrationResults.results.length > 0 && (
+                      <div className="mt-2">
+                        <h6 className="font-medium">세부 결과:</h6>
+                        <ul className="mt-1 space-y-1">
+                          {migrationResults.results.map((result: any, index: number) => (
+                            <li key={index} className="flex items-center">
+                              <span className={`mr-2 ${
+                                result.status === 'failed' ? 'text-red-500' :
+                                result.status === 'migrated' ? 'text-green-500' : 'text-gray-500'
+                              }`}>
+                                {result.status === 'failed' ? '❌' :
+                                 result.status === 'migrated' ? '✅' : 'ℹ️'}
+                              </span>
+                              <span>{result.tenantId}: {result.status}</span>
+                              {result.error && <span className="ml-2 text-red-500">({result.error})</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
