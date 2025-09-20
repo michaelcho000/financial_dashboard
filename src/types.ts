@@ -12,6 +12,8 @@ export interface Account {
   group?: string; // Grouping for display (e.g., '인건비')
   isDeletable: boolean;
   entryType: 'manual' | 'transaction';
+  isTemporary?: boolean;
+  isArchived?: boolean;
 }
 
 export interface Transaction {
@@ -22,25 +24,33 @@ export interface Transaction {
 
 export type FixedCostType = 'ASSET_FINANCE' | 'OPERATING_SERVICE';
 
-export interface FixedCostLedgerItem {
-  id: string; // 고유 ID
-  accountId: string; // '계정 관리'에 등록된 계정과목 ID
-  costType: FixedCostType; // '자산형'과 '운영성'을 구분하는 핵심 필드
+export interface FixedCostTemplate {
+  id: string; // 템플릿 고유 ID
+  accountId: string; // '계정 관리'에 등록된 고정비 계정 ID
+  costType: FixedCostType;
 
   // 공통 정보
-  serviceName: string; // 서비스/자산명 ('계정 관리'의 계정명과 동기화)
+  serviceName: string; // 서비스/자산명 ('계정 관리'와 동기화)
   vendor: string; // 업체명 (예: '롯데카드', 'KT 통신')
-  monthlyCost: number; // 월 납입액/사용료
+  monthlyCost: number; // 기본 월 납입액/사용료
   paymentDate?: string; // 출금일
-  
-  // 자산형(ASSET_FINANCE)에만 해당하는 상세 정보
-  leaseTermMonths?: number; // 계약 기간 (개월)
-  contractStartDate?: string; // 계약 시작일
-  contractEndDate?: string; // 만기일자
 
-  // 운영성(OPERATING_SERVICE)에만 해당하는 상세 정보
-  contractDetails?: string; // 기타 계약 현황 (예: '1년 약정')
-  renewalDate?: string; // 갱신 예정일
+  // 자산형(ASSET_FINANCE)에만 해당
+  leaseTermMonths?: number;
+  contractStartDate?: string;
+  contractEndDate?: string;
+
+  // 운영 서비스(OPERATING_SERVICE)에만 해당
+  contractDetails?: string;
+  renewalDate?: string;
+}
+
+export interface FixedCostActual {
+  id: string; // 고유 ID
+  templateId: string; // FixedCostTemplate 참조
+  month: string; // 적용 월 (YYYY-MM)
+  amount: number; // 해당 월 납입액 (수정 가능)
+  isActive: boolean; // 해당 월에 반영 여부
 }
 
 
@@ -70,6 +80,14 @@ export interface CalculatedMonthData {
   };
 }
 
+export interface MonthlyAccountOverride {
+  addedAccounts: Account[];
+}
+
+export type MonthlyAccountOverrides = {
+  [month: string]: MonthlyAccountOverride;
+};
+
 export interface AccountGroups {
   revenue: string[];
   cogs: string[];
@@ -90,22 +108,23 @@ export interface Tenant {
   name: string;
 }
 
-export interface UseFinancialDataReturn {
+export interface VariableAccountsState {
   accounts: {
     revenue: Account[];
     cogs: Account[];
-    sgaFixed: Account[];
     sgaVariable: Account[];
   };
-  allAccounts: Account[];
   accountGroups: AccountGroups;
   transactionData: TransactionData;
   manualData: ManualData;
-  fixedCostLedger: FixedCostLedgerItem[];
-  accountValues: { [month: string]: { [accountId: string]: number } };
-  calculatedData: {
-    [month: string]: CalculatedMonthData;
-  };
+  saveStructure: (payload: {
+    accounts: {
+      revenue: Account[];
+      cogs: Account[];
+      sgaVariable: Account[];
+    };
+    accountGroups: AccountGroups;
+  }) => void;
   addAccount: (name: string, category: AccountCategory, group: string) => void;
   removeAccount: (id: string, category: AccountCategory) => void;
   updateAccount: (accountId: string, updates: Partial<Pick<Account, 'name' | 'group'>>) => void;
@@ -114,12 +133,45 @@ export interface UseFinancialDataReturn {
   addTransaction: (month: string, accountId: string, transaction: Omit<Transaction, 'id'>) => void;
   removeTransaction: (month: string, accountId: string, transactionId: string) => void;
   updateTransaction: (month: string, accountId: string, transactionId: string, updates: Partial<Omit<Transaction, 'id'>>) => void;
-  addFixedCostLedgerItem: (item: Omit<FixedCostLedgerItem, 'id'>) => void;
-  updateFixedCostLedgerItem: (itemId: string, updates: Partial<FixedCostLedgerItem>) => void;
-  removeFixedCostLedgerItem: (itemId: string) => void;
   updateGroupName: (oldName: string, newName: string, type: 'revenue' | 'cogs' | 'sga') => void;
   addAccountGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
   removeAccountGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
+}
+
+export interface FixedCostsState {
+  accounts: Account[]; // SGA 고정비 계정
+  templates: FixedCostTemplate[];
+  actuals: FixedCostActual[];
+  addTemplate: (item: Omit<FixedCostTemplate, 'id'>) => string;
+  updateTemplate: (itemId: string, updates: Partial<FixedCostTemplate>) => void;
+  removeTemplate: (itemId: string) => void;
+  upsertActual: (month: string, templateId: string, payload: { amount?: number; isActive?: boolean }) => void;
+  removeActual: (month: string, templateId: string) => void;
+  updateAccount: (accountId: string, updates: Partial<Pick<Account, 'name' | 'group'>>) => void;
+  createAccount: (name: string, costType: FixedCostType) => string;
+}
+
+export interface IncomeStatementState {
+  accounts: {
+    revenue: Account[];
+    cogs: Account[];
+    sgaFixed: Account[];
+    sgaVariable: Account[];
+  };
+  accountValues: { [month: string]: { [accountId: string]: number } };
+  calculatedData: { [month: string]: CalculatedMonthData };
+  availableMonths: string[];
+  fixedCostActuals: FixedCostActual[];
+  monthlyOverrides: MonthlyAccountOverrides;
+  addMonthlyAccount: (month: string, payload: { name: string; category: AccountCategory; group: string; entryType?: 'manual' | 'transaction' }) => string;
+  updateMonthlyAccount: (month: string, accountId: string, updates: Partial<Pick<Account, 'name'>>) => void;
+  removeMonthlyAccount: (month: string, accountId: string) => void;
+}
+
+export interface UseFinancialDataReturn {
+  variable: VariableAccountsState;
+  fixed: FixedCostsState;
+  statement: IncomeStatementState;
 }
 
 
@@ -147,7 +199,9 @@ export interface Financials {
     accountGroups: AccountGroups;
     transactionData: TransactionData;
     manualData: ManualData;
-    fixedCostLedger: FixedCostLedgerItem[];
+    fixedCostTemplates: FixedCostTemplate[];
+    fixedCostActuals: FixedCostActual[];
+    monthlyOverrides?: MonthlyAccountOverrides;
 }
 
 // 시스템 설정을 위한 템플릿 구조
@@ -165,7 +219,8 @@ export interface SystemSettings {
       sgaFixed: Account[];
       sgaVariable: Account[];
     };
-    fixedCostLedger: FixedCostLedgerItem[];
+    fixedCostTemplates: FixedCostTemplate[];
+    fixedCostActualDefaults?: FixedCostActual[];
     initialMonths: string[];   // 기본 제공 월(예: ['2025-08'])
     manualDataDefaults?: ManualData;
     transactionDataDefaults?: TransactionData;

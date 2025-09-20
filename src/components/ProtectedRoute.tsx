@@ -24,12 +24,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
     return <>{children}</>;
   }
 
-  if (currentUser.role !== role) {
-    const defaultPath = currentUser.role === 'superAdmin' ? '/admin' : '/dashboard';
-    return <Navigate to={defaultPath} replace />;
+  if (currentUser.role === 'generalAdmin') {
+    if (role !== 'generalAdmin') {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <>{children}</>;
   }
 
-  return <>{children}</>;
+  // superAdmin 이외의 역할은 현재 정의되어 있지 않지만, 안전하게 대시보드로 이동
+  return <Navigate to="/dashboard" replace />;
 };
 
 export default ProtectedRoute;

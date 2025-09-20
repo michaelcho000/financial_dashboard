@@ -28,7 +28,8 @@ const SummarySection: React.FC<{
 }> = ({
   months,
 }) => {
-  const { calculatedData } = useFinancials();
+  const { statement } = useFinancials();
+  const { calculatedData } = statement;
   const validMonths = months.filter(Boolean) as string[];
   const summaryItems = [{
     label: '총 매출',
@@ -82,8 +83,8 @@ const SummarySection: React.FC<{
 };
 
 const FixedCostsSummary: React.FC<{ months: [string, string | null]; }> = ({ months }) => {
-  const data = useFinancials();
-  const { accounts } = data;
+  const { fixed } = useFinancials();
+  const { accounts: fixedAccounts } = fixed;
   const validMonths = months.filter(Boolean) as string[];
 
   return (
@@ -101,12 +102,13 @@ const FixedCostsSummary: React.FC<{ months: [string, string | null]; }> = ({ mon
             </tr>
           </thead>
           <tbody>
-            {accounts.sgaFixed.map(acc => (
+            {fixedAccounts.map(acc => (
               <AccountRow
                 key={acc.id}
                 account={acc}
                 months={validMonths}
                 isSubItem={false}
+                disableEditing
               />
             ))}
           </tbody>

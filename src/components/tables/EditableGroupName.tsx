@@ -12,7 +12,8 @@ export const EditableGroupName: React.FC<{
   groupName,
   type,
 }) => {
-  const { updateGroupName } = useFinancials();
+  const { variable } = useFinancials();
+  const { updateGroupName } = variable;
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(groupName);
   const inputRef = useRef<HTMLInputElement>(null);

@@ -1,8 +1,13 @@
-import { AccountCategory, DB, Financials, SystemSettings, Tenant, User } from '../types';
+import { AccountCategory, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
 
 const DB_KEY = 'financial_app_db';
 const DB_SCHEMA_VERSION = '1.0.0'; // DB 스키마 버전 (필드 구조 변경시에만 증가)
 const TEMPLATE_VERSION = '2.0.0'; // 템플릿 버전 (대표 계정 변경시 증가)
+
+const COST_TYPE_GROUP_LABEL: Record<FixedCostType, string> = {
+    ASSET_FINANCE: '리스/금융 자산',
+    OPERATING_SERVICE: '운영 서비스 계약',
+};
 
 // 구버전 → 신버전 계정 매핑 테이블
 const ACCOUNT_MIGRATION_MAP = {
@@ -50,11 +55,11 @@ const initialFinancials: Financials = {
             { id: 'cogs-4', name: '멤버십 원가', category: AccountCategory.COGS, group: '시술 원가', isDeletable: true, entryType: 'transaction' },
         ],
         sgaFixed: [
-            { id: 'sga-fix-1', name: '관리직 인건비', category: AccountCategory.SGA_FIXED, group: '인건비', isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-2', name: '4대보험료', category: AccountCategory.SGA_FIXED, group: '인건비', isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-3', name: '임차료', category: AccountCategory.SGA_FIXED, group: '임차/관리', isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-4', name: '공과금/관리비', category: AccountCategory.SGA_FIXED, group: '임차/관리', isDeletable: true, entryType: 'manual' },
-            { id: 'sga-fix-5', name: '감가상각/장비리스', category: AccountCategory.SGA_FIXED, group: '기타 비용', isDeletable: true, entryType: 'manual' },
+            { id: 'sga-fix-1', name: '관리직 인건비', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
+            { id: 'sga-fix-2', name: '4대보험료', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
+            { id: 'sga-fix-3', name: '임차료', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
+            { id: 'sga-fix-4', name: '공과금/관리비', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: true, entryType: 'manual' },
+            { id: 'sga-fix-5', name: '감가상각/장비리스', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.ASSET_FINANCE, isDeletable: true, entryType: 'manual' },
         ],
         sgaVariable: [
             { id: 'sga-var-1', name: '마케팅/광고비', category: AccountCategory.SGA_VARIABLE, group: '마케팅/운영', isDeletable: true, entryType: 'transaction' },
@@ -78,13 +83,26 @@ const initialFinancials: Financials = {
         },
     },
     manualData: {},
-    fixedCostLedger: [
+    fixedCostTemplates: [
         { id: 'fcl-1', accountId: 'sga-fix-1', costType: 'OPERATING_SERVICE', serviceName: '관리직 인건비', vendor: '내부', monthlyCost: 80000000, paymentDate: '매월 10일' },
         { id: 'fcl-2', accountId: 'sga-fix-2', costType: 'OPERATING_SERVICE', serviceName: '4대보험료', vendor: '정부', monthlyCost: 12000000, paymentDate: '매월 10일' },
         { id: 'fcl-3', accountId: 'sga-fix-3', costType: 'OPERATING_SERVICE', serviceName: '임차료', vendor: '건물주', monthlyCost: 15000000, paymentDate: '매월 1일' },
         { id: 'fcl-4', accountId: 'sga-fix-4', costType: 'OPERATING_SERVICE', serviceName: '공과금/관리비', vendor: '관리사무소', monthlyCost: 3000000, paymentDate: '매월 5일' },
         { id: 'fcl-5', accountId: 'sga-fix-5', costType: 'ASSET_FINANCE', serviceName: '감가상각/장비리스', vendor: '장비업체', monthlyCost: 5000000, paymentDate: '매월 15일', leaseTermMonths: 36, contractStartDate: '2025-01-01', contractEndDate: '2027-12-31' },
-    ]
+    ],
+    fixedCostActuals: [
+        { id: 'fca-2025-08-fcl-1', templateId: 'fcl-1', month: '2025-08', amount: 80000000, isActive: true },
+        { id: 'fca-2025-08-fcl-2', templateId: 'fcl-2', month: '2025-08', amount: 12000000, isActive: true },
+        { id: 'fca-2025-08-fcl-3', templateId: 'fcl-3', month: '2025-08', amount: 15000000, isActive: true },
+        { id: 'fca-2025-08-fcl-4', templateId: 'fcl-4', month: '2025-08', amount: 3000000, isActive: true },
+        { id: 'fca-2025-08-fcl-5', templateId: 'fcl-5', month: '2025-08', amount: 5000000, isActive: true },
+        { id: 'fca-2025-07-fcl-1', templateId: 'fcl-1', month: '2025-07', amount: 80000000, isActive: true },
+        { id: 'fca-2025-07-fcl-2', templateId: 'fcl-2', month: '2025-07', amount: 12000000, isActive: true },
+        { id: 'fca-2025-07-fcl-3', templateId: 'fcl-3', month: '2025-07', amount: 15000000, isActive: true },
+        { id: 'fca-2025-07-fcl-4', templateId: 'fcl-4', month: '2025-07', amount: 3000000, isActive: true },
+        { id: 'fca-2025-07-fcl-5', templateId: 'fcl-5', month: '2025-07', amount: 5000000, isActive: true },
+    ],
+    monthlyOverrides: {},
 };
 
 const initialDb: DB = {
@@ -117,7 +135,8 @@ function createDefaultSystemSettings(): SystemSettings {
             version: TEMPLATE_VERSION,
             accountGroups: JSON.parse(JSON.stringify(initialFinancials.accountGroups)),
             accounts: JSON.parse(JSON.stringify(initialFinancials.accounts)),
-            fixedCostLedger: JSON.parse(JSON.stringify(initialFinancials.fixedCostLedger)),
+            fixedCostTemplates: JSON.parse(JSON.stringify(initialFinancials.fixedCostTemplates)),
+            fixedCostActualDefaults: JSON.parse(JSON.stringify(initialFinancials.fixedCostActuals)),
             initialMonths: ['2025-08'], // 기본으로 제공할 월
             manualDataDefaults: {},
             transactionDataDefaults: {}
@@ -136,7 +155,9 @@ function createFinancialsFromTemplate(template: SystemSettings['tenantTemplate']
         accountGroups: JSON.parse(JSON.stringify(template.accountGroups)),
         transactionData: template.transactionDataDefaults ? JSON.parse(JSON.stringify(template.transactionDataDefaults)) : {},
         manualData: template.manualDataDefaults ? JSON.parse(JSON.stringify(template.manualDataDefaults)) : {},
-        fixedCostLedger: JSON.parse(JSON.stringify(template.fixedCostLedger))
+        fixedCostTemplates: JSON.parse(JSON.stringify(template.fixedCostTemplates)),
+        fixedCostActuals: template.fixedCostActualDefaults ? JSON.parse(JSON.stringify(template.fixedCostActualDefaults)) : [],
+        monthlyOverrides: {},
     };
 }
 
@@ -282,8 +303,8 @@ class DatabaseService {
         // 그룹 데이터 마이그레이션
         this.migrateAccountGroups(financials);
 
-        // 고정비 레저 마이그레이션
-        this.migrateFixedCostLedger(financials);
+        // 고정비 구조 마이그레이션
+        this.migrateFixedCosts(financials);
 
         // 버전 업데이트
         financials.templateVersion = TEMPLATE_VERSION;
@@ -347,30 +368,88 @@ class DatabaseService {
         });
     }
 
-    // 고정비 레저 마이그레이션
-    private migrateFixedCostLedger(financials: Financials) {
-        const newTemplate = this.getSettings().tenantTemplate;
+    // 고정비 구조 마이그레이션
+    private migrateFixedCosts(financials: Financials & { fixedCostLedger?: any[] }) {
+        const template = this.getSettings().tenantTemplate;
 
-        financials.fixedCostLedger.forEach(item => {
-            // 매핑된 템플릿 아이템 찾기
-            const templateItem = newTemplate.fixedCostLedger.find(ti => ti.accountId === item.accountId);
+        // 구 구조(fixedCostLedger)를 신 구조로 변환
+        if (!Array.isArray(financials.fixedCostTemplates)) {
+            const legacyLedger = Array.isArray((financials as any).fixedCostLedger) ? (financials as any).fixedCostLedger : [];
+            financials.fixedCostTemplates = legacyLedger.map((item: any) => ({ ...item }));
+
+            const monthsFromManual = Object.keys(financials.manualData || {});
+            const seedMonths = monthsFromManual.length > 0
+                ? monthsFromManual
+                : (template.initialMonths || []);
+
+            financials.fixedCostActuals = [];
+            seedMonths.forEach(month => {
+                financials.fixedCostTemplates.forEach(templateItem => {
+                    financials.fixedCostActuals.push({
+                        id: `migrated-${month}-${templateItem.id}`,
+                        templateId: templateItem.id,
+                        month,
+                        amount: templateItem.monthlyCost,
+                        isActive: true,
+                    });
+                });
+            });
+        }
+
+        if (!Array.isArray(financials.fixedCostActuals)) {
+            financials.fixedCostActuals = [];
+        }
+
+        // 템플릿 최신화 (서비스명 등 동기화)
+        financials.fixedCostTemplates.forEach(item => {
+            const templateItem = template.fixedCostTemplates.find(t => t.accountId === item.accountId);
             if (templateItem) {
-                // 서비스명을 템플릿 기준으로 업데이트
-                item.serviceName = templateItem.serviceName;
-            }
-        });
-
-        // 새 템플릿에서 추가된 고정비 항목이 있으면 추가
-        newTemplate.fixedCostLedger.forEach(templateItem => {
-            const exists = financials.fixedCostLedger.find(item => item.accountId === templateItem.accountId);
-            if (!exists) {
-                // 새로운 고정비 항목 추가
-                financials.fixedCostLedger.push({
-                    ...templateItem,
-                    id: `migrated-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+                Object.assign(item, {
+                    serviceName: templateItem.serviceName,
+                    costType: templateItem.costType,
                 });
             }
         });
+
+        // 새 템플릿 항목 추가
+        template.fixedCostTemplates.forEach(templateItem => {
+            const exists = financials.fixedCostTemplates.find(item => item.accountId === templateItem.accountId);
+            if (!exists) {
+                const newId = `migrated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                financials.fixedCostTemplates.push({
+                    ...templateItem,
+                    id: newId,
+                });
+
+                // 기본 월 자료도 생성
+                const defaultMonths = template.initialMonths?.length ? template.initialMonths : ['2025-01'];
+                defaultMonths.forEach(month => {
+                    financials.fixedCostActuals.push({
+                        id: `migrated-${month}-${newId}`,
+                        templateId: newId,
+                        month,
+                        amount: templateItem.monthlyCost,
+                        isActive: true,
+                    });
+                });
+            }
+        });
+
+        financials.accounts.sgaFixed = financials.accounts.sgaFixed.map(account => {
+            const linkedTemplate = financials.fixedCostTemplates.find(t => t.accountId === account.id);
+            if (linkedTemplate) {
+                return {
+                    ...account,
+                    group: COST_TYPE_GROUP_LABEL[linkedTemplate.costType],
+                };
+            }
+            return account;
+        });
+
+        // 레거시 필드 정리
+        if ((financials as any).fixedCostLedger) {
+            delete (financials as any).fixedCostLedger;
+        }
     }
 
     // 병원 데이터 백업 생성

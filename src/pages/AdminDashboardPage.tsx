@@ -85,7 +85,7 @@ const AdminDashboardPage: React.FC = () => {
             }
 
             // Check if has fixed costs
-            const hasFixedCosts = financials.fixedCostLedger && financials.fixedCostLedger.length > 0;
+            const hasFixedCosts = financials.fixedCostTemplates && financials.fixedCostTemplates.length > 0;
 
             return {
                 tenant,

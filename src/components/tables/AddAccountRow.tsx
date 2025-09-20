@@ -14,7 +14,14 @@ export const AddAccountRow: React.FC<{
   group,
   colSpan
 }) => {
-  const { addAccount, allAccounts } = useFinancials();
+  const { variable, statement } = useFinancials();
+  const { addAccount } = variable;
+  const allAccounts: Account[] = [
+    ...statement.accounts.revenue,
+    ...statement.accounts.cogs,
+    ...statement.accounts.sgaFixed,
+    ...statement.accounts.sgaVariable,
+  ];
   const [name, setName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [suggestions, setSuggestions] = useState<Account[]>([]);

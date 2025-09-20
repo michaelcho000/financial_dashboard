@@ -43,10 +43,15 @@ const legacyData = {
           }
         },
         manualData: {},
-        fixedCostLedger: [
+        fixedCostTemplates: [
           { id: 'fcl-1', accountId: 'sga-fix-1', costType: 'OPERATING_SERVICE', serviceName: '직원급여', vendor: '내부', monthlyCost: 80000000, paymentDate: '매월 10일' },
           { id: 'fcl-2', accountId: 'sga-fix-2', costType: 'OPERATING_SERVICE', serviceName: '4대보험', vendor: '정부', monthlyCost: 12000000, paymentDate: '매월 10일' },
           { id: 'fcl-3', accountId: 'sga-fix-3', costType: 'OPERATING_SERVICE', serviceName: '월 임차료', vendor: '건물주', monthlyCost: 15000000, paymentDate: '매월 1일' }
+        ],
+        fixedCostActuals: [
+          { id: 'fca-legacy-2025-08-fcl-1', templateId: 'fcl-1', month: '2025-08', amount: 80000000, isActive: true },
+          { id: 'fca-legacy-2025-08-fcl-2', templateId: 'fcl-2', month: '2025-08', amount: 12000000, isActive: true },
+          { id: 'fca-legacy-2025-08-fcl-3', templateId: 'fcl-3', month: '2025-08', amount: 15000000, isActive: true }
         ]
       },
       'tenant-2': {
@@ -71,7 +76,8 @@ const legacyData = {
         },
         transactionData: {},
         manualData: {},
-        fixedCostLedger: []
+        fixedCostTemplates: [],
+        fixedCostActuals: []
       }
     }
   })

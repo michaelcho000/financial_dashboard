@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Account, AccountCategory } from '../types';
 import ConfirmationModal from '../components/common/ConfirmationModal';
 import { useFinancials } from '../contexts/FinancialDataContext';
@@ -6,10 +6,11 @@ import Header from '../components/Header';
 
 interface AccountRowEditorProps {
     account: Account;
+    onRename: (accountId: string, name: string) => void;
+    onRemove: (accountId: string) => void;
 }
 
-const AccountRowEditor: React.FC<AccountRowEditorProps> = ({ account }) => {
-    const { updateAccount, removeAccount } = useFinancials();
+const AccountRowEditor: React.FC<AccountRowEditorProps> = ({ account, onRename, onRemove }) => {
     const [name, setName] = useState(account.name);
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     
@@ -19,14 +20,14 @@ const AccountRowEditor: React.FC<AccountRowEditorProps> = ({ account }) => {
 
     const handleNameBlur = () => {
         if (name.trim() && name.trim() !== account.name) {
-            updateAccount(account.id, { name: name.trim() });
+            onRename(account.id, name.trim());
         } else {
             setName(account.name);
         }
     };
 
     const handleDelete = () => {
-        removeAccount(account.id, account.category);
+        onRemove(account.id);
         setIsConfirmingDelete(false);
     }
     
@@ -68,18 +69,30 @@ interface GroupEditorProps {
     groupName: string;
     accounts: Account[];
     type: 'revenue' | 'cogs' | 'sga';
-    categoryForAdding: AccountCategory;
+    category: AccountCategory;
+    onAddAccount: (category: AccountCategory, group: string, name: string) => void;
+    onRemoveAccount: (category: AccountCategory, accountId: string) => void;
+    onRenameAccount: (category: AccountCategory, accountId: string, name: string) => void;
+    onRemoveGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
 }
 
-const GroupEditor: React.FC<GroupEditorProps> = ({ groupName, accounts, type, categoryForAdding}) => {
-    const { addAccount, removeAccountGroup } = useFinancials();
+const GroupEditor: React.FC<GroupEditorProps> = ({
+    groupName,
+    accounts,
+    type,
+    category,
+    onAddAccount,
+    onRemoveAccount,
+    onRenameAccount,
+    onRemoveGroup,
+}) => {
     const [newAccountName, setNewAccountName] = useState('');
     const [isAddingAccount, setIsAddingAccount] = useState(false);
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     
     const handleAddAccount = () => {
         if (newAccountName.trim()) {
-            addAccount(newAccountName.trim(), categoryForAdding, groupName);
+            onAddAccount(category, groupName, newAccountName.trim());
             setNewAccountName('');
             setIsAddingAccount(false);
         }
@@ -91,7 +104,7 @@ const GroupEditor: React.FC<GroupEditorProps> = ({ groupName, accounts, type, ca
             setIsConfirmingDelete(false);
             return;
         }
-        removeAccountGroup(groupName, type);
+        onRemoveGroup(groupName, type);
         setIsConfirmingDelete(false);
     };
 
@@ -107,7 +120,14 @@ const GroupEditor: React.FC<GroupEditorProps> = ({ groupName, accounts, type, ca
                 </button>
             </div>
             <div>
-                {accounts.map(acc => <AccountRowEditor key={acc.id} account={acc} />)}
+                {accounts.map(acc => (
+                    <AccountRowEditor
+                        key={acc.id}
+                        account={acc}
+                        onRename={(accountId, updatedName) => onRenameAccount(category, accountId, updatedName)}
+                        onRemove={(accountId) => onRemoveAccount(category, accountId)}
+                    />
+                ))}
             </div>
             <div className="p-2 pl-8 border-t">
                 {isAddingAccount ? (
@@ -146,16 +166,31 @@ interface SectionEditorProps {
     type: 'revenue' | 'cogs' | 'sga';
     groups: string[];
     allAccounts: Account[];
-    categoryForAdding: AccountCategory;
+    category: AccountCategory;
+    onAddGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
+    onRemoveGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
+    onAddAccount: (category: AccountCategory, groupName: string, name: string) => void;
+    onRemoveAccount: (category: AccountCategory, accountId: string) => void;
+    onRenameAccount: (category: AccountCategory, accountId: string, name: string) => void;
 }
-const SectionEditor: React.FC<SectionEditorProps> = ({ title, type, groups, allAccounts, categoryForAdding }) => {
-    const { addAccountGroup } = useFinancials();
+const SectionEditor: React.FC<SectionEditorProps> = ({
+    title,
+    type,
+    groups,
+    allAccounts,
+    category,
+    onAddGroup,
+    onRemoveGroup,
+    onAddAccount,
+    onRemoveAccount,
+    onRenameAccount,
+}) => {
     const [newGroupName, setNewGroupName] = useState('');
     const [isAddingGroup, setIsAddingGroup] = useState(false);
 
     const handleAddGroup = () => {
         if (newGroupName.trim()) {
-            addAccountGroup(newGroupName.trim(), type);
+            onAddGroup(newGroupName.trim(), type);
             setNewGroupName('');
             setIsAddingGroup(false);
         }
@@ -170,7 +205,11 @@ const SectionEditor: React.FC<SectionEditorProps> = ({ title, type, groups, allA
                     groupName={group}
                     accounts={allAccounts.filter(a => a.group === group)}
                     type={type}
-                    categoryForAdding={categoryForAdding}
+                    category={category}
+                    onAddAccount={onAddAccount}
+                    onRemoveAccount={onRemoveAccount}
+                    onRenameAccount={onRenameAccount}
+                    onRemoveGroup={onRemoveGroup}
                 />
             ))}
             <div className="mt-4">
@@ -197,8 +236,111 @@ const SectionEditor: React.FC<SectionEditorProps> = ({ title, type, groups, allA
 
 
 const AccountManagementPage: React.FC = () => {
-    const { accounts, accountGroups, currentMonths, setCurrentMonths } = useFinancials();
-    const allSgaAccounts = [...accounts.sgaFixed, ...accounts.sgaVariable];
+    const { variable, currentMonths, setCurrentMonths } = useFinancials();
+    const { accounts, accountGroups, saveStructure } = variable;
+
+    const buildDraftAccounts = useCallback(() => ({
+        revenue: accounts.revenue.map(acc => ({ ...acc })),
+        cogs: accounts.cogs.map(acc => ({ ...acc })),
+        sgaVariable: accounts.sgaVariable.map(acc => ({ ...acc })),
+    }), [accounts]);
+
+    const buildDraftGroups = useCallback(() => ({
+        revenue: [...accountGroups.revenue],
+        cogs: [...accountGroups.cogs],
+        sga: [...accountGroups.sga],
+    }), [accountGroups]);
+
+    const [draftAccounts, setDraftAccounts] = useState(() => buildDraftAccounts());
+    const [draftGroups, setDraftGroups] = useState(() => buildDraftGroups());
+    const [isDirty, setIsDirty] = useState(false);
+
+    useEffect(() => {
+        if (isDirty) {
+            return;
+        }
+        setDraftAccounts(buildDraftAccounts());
+        setDraftGroups(buildDraftGroups());
+    }, [buildDraftAccounts, buildDraftGroups, isDirty]);
+
+    const markDirty = useCallback(() => setIsDirty(true), []);
+
+    const updateDraftAccounts = useCallback((category: AccountCategory, updater: (items: Account[]) => Account[]) => {
+        setDraftAccounts(prev => {
+            const next = { ...prev };
+            if (category === AccountCategory.REVENUE) {
+                next.revenue = updater(prev.revenue);
+            } else if (category === AccountCategory.COGS) {
+                next.cogs = updater(prev.cogs);
+            } else if (category === AccountCategory.SGA_VARIABLE) {
+                next.sgaVariable = updater(prev.sgaVariable);
+            }
+            return next;
+        });
+        markDirty();
+    }, [markDirty]);
+
+    const updateDraftGroups = useCallback((type: 'revenue' | 'cogs' | 'sga', updater: (groups: string[]) => string[]) => {
+        setDraftGroups(prev => ({
+            ...prev,
+            [type]: updater(prev[type]),
+        }));
+        markDirty();
+    }, [markDirty]);
+
+    const handleAddAccount = useCallback((category: AccountCategory, groupName: string, name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+
+        const newAccount: Account = {
+            id: `${category.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: trimmed,
+            category,
+            group: groupName,
+            isDeletable: true,
+            entryType: category === AccountCategory.SGA_FIXED ? 'manual' : 'transaction',
+        };
+
+        updateDraftAccounts(category, items => [...items, newAccount]);
+    }, [updateDraftAccounts]);
+
+    const handleRemoveAccount = useCallback((category: AccountCategory, accountId: string) => {
+        updateDraftAccounts(category, items => items.filter(acc => acc.id !== accountId));
+    }, [updateDraftAccounts]);
+
+    const handleRenameAccount = useCallback((category: AccountCategory, accountId: string, name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        updateDraftAccounts(category, items => items.map(acc => (
+            acc.id === accountId ? { ...acc, name: trimmed } : acc
+        )));
+    }, [updateDraftAccounts]);
+
+    const handleAddGroup = useCallback((groupName: string, type: 'revenue' | 'cogs' | 'sga') => {
+        const trimmed = groupName.trim();
+        if (!trimmed) return;
+        updateDraftGroups(type, groups => (groups.includes(trimmed) ? groups : [...groups, trimmed]));
+    }, [updateDraftGroups]);
+
+    const handleRemoveGroup = useCallback((groupName: string, type: 'revenue' | 'cogs' | 'sga') => {
+        updateDraftGroups(type, groups => groups.filter(group => group !== groupName));
+    }, [updateDraftGroups]);
+
+    const handleSave = useCallback(() => {
+        saveStructure({
+            accounts: {
+                revenue: draftAccounts.revenue.map(acc => ({ ...acc, name: acc.name.trim() })),
+                cogs: draftAccounts.cogs.map(acc => ({ ...acc, name: acc.name.trim() })),
+                sgaVariable: draftAccounts.sgaVariable.map(acc => ({ ...acc, name: acc.name.trim() })),
+            },
+            accountGroups: {
+                revenue: [...draftGroups.revenue],
+                cogs: [...draftGroups.cogs],
+                sga: [...draftGroups.sga],
+            },
+        });
+        setIsDirty(false);
+    }, [draftAccounts, draftGroups, saveStructure]);
 
     return (
         <>
@@ -210,27 +352,53 @@ const AccountManagementPage: React.FC = () => {
                 setCurrentMonths={setCurrentMonths}
             />
 
+            <div className="mt-6 flex justify-end">
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!isDirty}
+                    className={`px-4 py-2 rounded-md text-base font-semibold ${isDirty ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                >
+                    변경사항 저장
+                </button>
+            </div>
+
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-start">
                 <SectionEditor
                     title="매출 계정"
                     type="revenue"
-                    groups={accountGroups.revenue}
-                    allAccounts={accounts.revenue}
-                    categoryForAdding={AccountCategory.REVENUE}
+                    groups={draftGroups.revenue}
+                    allAccounts={draftAccounts.revenue}
+                    category={AccountCategory.REVENUE}
+                    onAddGroup={handleAddGroup}
+                    onRemoveGroup={handleRemoveGroup}
+                    onAddAccount={handleAddAccount}
+                    onRemoveAccount={handleRemoveAccount}
+                    onRenameAccount={handleRenameAccount}
                 />
                 <SectionEditor
                     title="매출원가 계정"
                     type="cogs"
-                    groups={accountGroups.cogs}
-                    allAccounts={accounts.cogs}
-                    categoryForAdding={AccountCategory.COGS}
+                    groups={draftGroups.cogs}
+                    allAccounts={draftAccounts.cogs}
+                    category={AccountCategory.COGS}
+                    onAddGroup={handleAddGroup}
+                    onRemoveGroup={handleRemoveGroup}
+                    onAddAccount={handleAddAccount}
+                    onRemoveAccount={handleRemoveAccount}
+                    onRenameAccount={handleRenameAccount}
                 />
                 <SectionEditor
                     title="판매비와 관리비 계정"
                     type="sga"
-                    groups={accountGroups.sga}
-                    allAccounts={allSgaAccounts}
-                    categoryForAdding={AccountCategory.SGA_VARIABLE}
+                    groups={draftGroups.sga}
+                    allAccounts={draftAccounts.sgaVariable}
+                    category={AccountCategory.SGA_VARIABLE}
+                    onAddGroup={handleAddGroup}
+                    onRemoveGroup={handleRemoveGroup}
+                    onAddAccount={handleAddAccount}
+                    onRemoveAccount={handleRemoveAccount}
+                    onRenameAccount={handleRenameAccount}
                 />
             </div>
         </>

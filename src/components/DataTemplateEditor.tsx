@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Account, AccountCategory, SystemSettings, FixedCostLedgerItem } from '../types';
+import { Account, AccountCategory, SystemSettings, FixedCostTemplate } from '../types';
 import DatabaseService from '../services/DatabaseService';
 import ConfirmationModal from './common/ConfirmationModal';
 

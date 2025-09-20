@@ -22,7 +22,8 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; 
 );
 
 const DashboardPage: React.FC = () => {
-    const { currentUser, currentTenant, calculatedData, currentMonths, setCurrentMonths } = useFinancials();
+    const { currentUser, currentTenant, statement, currentMonths, setCurrentMonths } = useFinancials();
+    const { calculatedData } = statement;
     const [currentMonth] = currentMonths;
     const data = currentMonth ? calculatedData[currentMonth] : null;
 

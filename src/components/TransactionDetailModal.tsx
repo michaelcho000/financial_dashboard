@@ -96,8 +96,15 @@ const TransactionRow: React.FC<{
 
 
 const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({ month, accountId, accountName, onClose }) => {
-  const { transactionData, addTransaction, removeTransaction, updateTransaction, updateAccount, allAccounts } = useFinancials();
+  const { variable, statement } = useFinancials();
+  const { transactionData, addTransaction, removeTransaction, updateTransaction, updateAccount } = variable;
   const transactions = transactionData[month]?.[accountId] || [];
+  const allAccounts = [
+    ...statement.accounts.revenue,
+    ...statement.accounts.cogs,
+    ...statement.accounts.sgaFixed,
+    ...statement.accounts.sgaVariable,
+  ];
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
