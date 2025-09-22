@@ -1,14 +1,15 @@
 export enum AccountCategory {
   REVENUE = 'REVENUE',
-  COGS = 'COGS',
-  SGA_FIXED = 'SGA_FIXED',
-  SGA_VARIABLE = 'SGA_VARIABLE',
+  EXPENSE = 'EXPENSE',
 }
+
+export type CostBehavior = 'variable' | 'fixed';
 
 export interface Account {
   id: string;
   name: string;
   category: AccountCategory;
+  costBehavior?: CostBehavior; // 지출 계정 비용 성격 (없으면 변동비)
   group?: string; // Grouping for display (e.g., '인건비')
   isDeletable: boolean;
   entryType: 'manual' | 'transaction';
@@ -67,14 +68,11 @@ export interface ManualData {
 }
 
 export interface CalculatedMonthData {
-  revenue: number;
-  cogs: number;
-  grossProfit: number;
-  cogsRatio: number;
-  sgaFixed: number;
-  sgaVariable: number;
-  totalSga: number;
-  operatingProfit: number;
+  totalRevenue: number;
+  variableExpense: number;
+  fixedExpense: number;
+  totalExpense: number;
+  operatingIncome: number;
   groupSubtotals: {
     [groupName: string]: number;
   };
@@ -90,8 +88,7 @@ export type MonthlyAccountOverrides = {
 
 export interface AccountGroups {
   revenue: string[];
-  cogs: string[];
-  sga: string[];
+  expense: string[];
 }
 
 export interface User {
@@ -111,8 +108,7 @@ export interface Tenant {
 export interface VariableAccountsState {
   accounts: {
     revenue: Account[];
-    cogs: Account[];
-    sgaVariable: Account[];
+    expense: Account[];
   };
   accountGroups: AccountGroups;
   transactionData: TransactionData;
@@ -120,26 +116,25 @@ export interface VariableAccountsState {
   saveStructure: (payload: {
     accounts: {
       revenue: Account[];
-      cogs: Account[];
-      sgaVariable: Account[];
+      expense: Account[];
     };
     accountGroups: AccountGroups;
   }) => void;
-  addAccount: (name: string, category: AccountCategory, group: string) => void;
-  removeAccount: (id: string, category: AccountCategory) => void;
+  addAccount: (payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => void;
+  removeAccount: (id: string) => void;
   updateAccount: (accountId: string, updates: Partial<Pick<Account, 'name' | 'group'>>) => void;
   updateManualAccountValue: (month: string, accountId: string, value: number) => void;
   setTransactionAccountTotal: (month: string, accountId: string, totalAmount: number, accountName: string) => void;
   addTransaction: (month: string, accountId: string, transaction: Omit<Transaction, 'id'>) => void;
   removeTransaction: (month: string, accountId: string, transactionId: string) => void;
   updateTransaction: (month: string, accountId: string, transactionId: string, updates: Partial<Omit<Transaction, 'id'>>) => void;
-  updateGroupName: (oldName: string, newName: string, type: 'revenue' | 'cogs' | 'sga') => void;
-  addAccountGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
-  removeAccountGroup: (groupName: string, type: 'revenue' | 'cogs' | 'sga') => void;
+  updateGroupName: (oldName: string, newName: string, type: 'revenue' | 'expense') => void;
+  addAccountGroup: (groupName: string, type: 'revenue' | 'expense') => void;
+  removeAccountGroup: (groupName: string, type: 'revenue' | 'expense') => void;
 }
 
 export interface FixedCostsState {
-  accounts: Account[]; // SGA 고정비 계정
+  accounts: Account[]; // 고정비 계정 (expense 중 costBehavior === 'fixed')
   templates: FixedCostTemplate[];
   actuals: FixedCostActual[];
   addTemplate: (item: Omit<FixedCostTemplate, 'id'>) => string;
@@ -154,16 +149,14 @@ export interface FixedCostsState {
 export interface IncomeStatementState {
   accounts: {
     revenue: Account[];
-    cogs: Account[];
-    sgaFixed: Account[];
-    sgaVariable: Account[];
+    expense: Account[];
   };
   accountValues: { [month: string]: { [accountId: string]: number } };
   calculatedData: { [month: string]: CalculatedMonthData };
   availableMonths: string[];
   fixedCostActuals: FixedCostActual[];
   monthlyOverrides: MonthlyAccountOverrides;
-  addMonthlyAccount: (month: string, payload: { name: string; category: AccountCategory; group: string; entryType?: 'manual' | 'transaction' }) => string;
+  addMonthlyAccount: (month: string, payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => string;
   updateMonthlyAccount: (month: string, accountId: string, updates: Partial<Pick<Account, 'name'>>) => void;
   removeMonthlyAccount: (month: string, accountId: string) => void;
 }
@@ -192,9 +185,7 @@ export interface Financials {
     templateVersion?: string; // 이 병원 데이터가 기반한 템플릿 버전
     accounts: {
         revenue: Account[];
-        cogs: Account[];
-        sgaFixed: Account[];
-        sgaVariable: Account[];
+        expense: Account[];
     };
     accountGroups: AccountGroups;
     transactionData: TransactionData;
@@ -210,14 +201,11 @@ export interface SystemSettings {
     version: string;  // 템플릿 전용 버전 관리
     accountGroups: {
       revenue: string[];
-      cogs: string[];
-      sga: string[];
+      expense: string[];
     };
     accounts: {
       revenue: Account[];
-      cogs: Account[];
-      sgaFixed: Account[];
-      sgaVariable: Account[];
+      expense: Account[];
     };
     fixedCostTemplates: FixedCostTemplate[];
     fixedCostActualDefaults?: FixedCostActual[];

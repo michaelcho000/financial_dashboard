@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+﻿import React, { useMemo, useRef, useState } from 'react';
 import { formatCurrency, formatMonth } from '../utils/formatters';
-import { Account, AccountCategory } from '../types';
+import { Account, AccountCategory, CostBehavior } from '../types';
 import TransactionDetailModal from './TransactionDetailModal';
 import { useFinancials } from '../contexts/FinancialDataContext';
 import { EditIcon } from './common/EditIcon';
@@ -8,7 +8,9 @@ import ConfirmationModal from './common/ConfirmationModal';
 
 interface IncomeStatementTableProps {
   months: [string, string | null];
-  display: 'revenue' | 'cogs' | 'sga';
+  display: 'revenue' | 'expense';
+  filterGroup?: string;
+  costBehaviorFilter?: CostBehavior;
 }
 
 interface RowAccount {
@@ -38,6 +40,8 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
   onRenameTemporary,
 }) => {
   const { account, availability } = row;
+  const isTransactionAccount = account.entryType === 'transaction';
+  const isFixedExpense = account.category === AccountCategory.EXPENSE && account.costBehavior === 'fixed';
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState(account.name);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -96,7 +100,10 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
                 </div>
               </>
             ) : (
-              <span>{account.name}</span>
+              <div className="flex items-center gap-2">
+                <span>{account.name}</span>
+                
+              </div>
             )}
           </div>
         </td>
@@ -114,13 +121,19 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
           return (
             <td key={month} className="py-3 px-4 text-base text-right">
               <div className="flex items-center justify-end gap-2">
-                <input
-                  type="text"
-                  value={formatCurrency(value)}
-                  onChange={(e) => onValueChange(month, e.target.value)}
-                  className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${isNegative ? 'text-red-600' : ''}`}
-                />
-                {onShowDetails && (
+                {(!isTransactionAccount && !isFixedExpense) ? (
+                  <input
+                    type="text"
+                    value={formatCurrency(value)}
+                    onChange={(e) => onValueChange(month, e.target.value)}
+                    className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${isNegative ? 'text-red-600' : ''}`}
+                  />
+                ) : (
+                  <span className={`min-w-[6rem] text-right ${isNegative ? 'text-red-600' : ''}`}>
+                    {formatCurrency(value)}
+                  </span>
+                )}
+                {onShowDetails && isTransactionAccount && !isFixedExpense && (
                   <button
                     type="button"
                     onClick={() => onShowDetails(month, account.id, account.name)}
@@ -153,7 +166,8 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
 const MonthlyAccountAdder: React.FC<{
   months: string[];
   onAdd: (month: string, name: string) => void;
-}> = ({ months, onAdd }) => {
+  disabled?: boolean;
+}> = ({ months, onAdd, disabled }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
   const targetMonth = months[0];
@@ -170,7 +184,7 @@ const MonthlyAccountAdder: React.FC<{
     setIsEditing(false);
   };
 
-  if (months.length === 0) {
+  if (disabled || months.length === 0) {
     return null;
   }
 
@@ -206,7 +220,7 @@ const MonthlyAccountAdder: React.FC<{
   );
 };
 
-const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, display }) => {
+const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, display, filterGroup, costBehaviorFilter }) => {
   const { variable, statement } = useFinancials();
   const { updateManualAccountValue, setTransactionAccountTotal, manualData, transactionData } = variable;
   const { monthlyOverrides, addMonthlyAccount, updateMonthlyAccount, removeMonthlyAccount, accountValues, accounts: statementAccounts } = statement;
@@ -227,34 +241,28 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
   const hideDetails = () => setModalState({ isOpen: false });
 
   const groupConfig = useMemo(() => {
-    switch (display) {
-      case 'revenue':
-        return {
-          groups: variable.accountGroups.revenue,
-          baseAccounts: variable.accounts.revenue,
-          category: AccountCategory.REVENUE,
-          accountKey: 'revenue' as const,
-          isNegative: false,
-        };
-      case 'cogs':
-        return {
-          groups: variable.accountGroups.cogs,
-          baseAccounts: variable.accounts.cogs,
-          category: AccountCategory.COGS,
-          accountKey: 'cogs' as const,
-          isNegative: true,
-        };
-      case 'sga':
-      default:
-        return {
-          groups: variable.accountGroups.sga,
-          baseAccounts: variable.accounts.sgaVariable,
-          category: AccountCategory.SGA_VARIABLE,
-          accountKey: 'sgaVariable' as const,
-          isNegative: true,
-        };
+    if (display === 'revenue') {
+      return {
+        groups: variable.accountGroups.revenue,
+        baseAccounts: variable.accounts.revenue,
+        category: AccountCategory.REVENUE,
+        accountKey: 'revenue' as const,
+        isNegative: false,
+      };
     }
-  }, [display, variable.accountGroups, variable.accounts]);
+
+    const filteredExpenseAccounts = costBehaviorFilter
+      ? variable.accounts.expense.filter(acc => acc.costBehavior === costBehaviorFilter)
+      : variable.accounts.expense;
+
+    return {
+      groups: variable.accountGroups.expense,
+      baseAccounts: filteredExpenseAccounts,
+      category: AccountCategory.EXPENSE,
+      accountKey: 'expense' as const,
+      isNegative: true,
+    };
+  }, [display, variable.accountGroups, variable.accounts, costBehaviorFilter]);
 
   const handleValueChange = (account: Account) => (month: string, rawValue: string) => {
     const numeric = parseInt(rawValue.replace(/[^0-9-]/g, ''), 10) || 0;
@@ -266,10 +274,13 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
   };
 
   const handleAddTemporaryAccount = (group: string, month: string, name: string, category: AccountCategory) => {
-    addMonthlyAccount(month, { name, category, group });
+    const costBehavior = category === AccountCategory.EXPENSE ? (costBehaviorFilter ?? 'variable') : undefined;
+    addMonthlyAccount(month, { name, category, group, costBehavior });
   };
 
-  const tables = groupConfig.groups.map(groupName => {
+  const targetGroups = filterGroup ? [filterGroup] : groupConfig.groups;
+
+  const tables = targetGroups.map(groupName => {
     const rows: RowAccount[] = [];
 
     groupConfig.baseAccounts
@@ -280,13 +291,27 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
       const override = monthlyOverrides[month];
       if (!override) return;
       override.addedAccounts
-        ?.filter(acc => acc.group === groupName && acc.category === groupConfig.category)
+        ?.filter(acc => {
+          if (acc.group !== groupName || acc.category !== groupConfig.category) return false;
+          if (groupConfig.category === AccountCategory.EXPENSE && costBehaviorFilter) {
+            return acc.costBehavior === costBehaviorFilter;
+          }
+          return true;
+        })
         .forEach(acc => {
           rows.push({ account: acc, availability: new Set([month]) });
         });
     });
 
-    const archivedCandidates = statementAccounts[groupConfig.accountKey].filter(acc => acc.group === groupName && acc.isArchived);
+    const archivedCandidates = statementAccounts[groupConfig.accountKey]
+      .filter(acc => {
+        if (acc.group !== groupName || !acc.isArchived) return false;
+        if (groupConfig.category === AccountCategory.EXPENSE && costBehaviorFilter) {
+          return acc.costBehavior === costBehaviorFilter;
+        }
+        return true;
+      });
+
     archivedCandidates.forEach(acc => {
       const activeMonths = new Set<string>();
       validMonths.forEach(month => {
@@ -313,6 +338,8 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
         return sum + value;
       }, 0);
     });
+
+    const disableAdder = groupConfig.category === AccountCategory.EXPENSE && costBehaviorFilter === 'fixed';
 
     return (
       <table key={groupName} className="w-full border-collapse">
@@ -354,6 +381,7 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
           <MonthlyAccountAdder
             months={validMonths}
             onAdd={(month, name) => handleAddTemporaryAccount(groupName, month, name, groupConfig.category)}
+            disabled={disableAdder}
           />
         </tbody>
         <tfoot className="border-t-2 border-slate-300">
@@ -390,3 +418,8 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
 };
 
 export default IncomeStatementTable;
+
+
+
+
+

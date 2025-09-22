@@ -1,4 +1,4 @@
-
+﻿
 
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -57,8 +57,10 @@ export const AccountRow: React.FC<AccountRowProps> = ({
     setIsEditingName(false);
   };
 
+  const isFixedExpense = account.category === AccountCategory.EXPENSE && account.costBehavior === 'fixed';
+
   const handleValueChange = (month: string, value: string) => {
-    if (disableEditing || account.category === AccountCategory.SGA_FIXED) {
+    if (disableEditing || isFixedExpense) {
       return;
     }
     const numericValue = parseInt(value.replace(/,/g, ''), 10) || 0;
@@ -70,7 +72,7 @@ export const AccountRow: React.FC<AccountRowProps> = ({
   };
   
   const handleDelete = () => {
-    removeAccount(account.id, account.category);
+    removeAccount(account.id);
     setIsConfirmingDelete(false);
   };
 
@@ -90,7 +92,9 @@ export const AccountRow: React.FC<AccountRowProps> = ({
               />
             ) : (
               <>
-                <span>{account.name}</span>
+                <div className="flex items-center gap-2">
+                  <span>{account.name}</span>
+                </div>
                 {!disableEditing && (
                   <EditIcon onClick={() => setIsEditingName(true)} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                 )}
@@ -112,10 +116,10 @@ export const AccountRow: React.FC<AccountRowProps> = ({
                 type="text"
                 value={formatCurrency(accountValues[month]?.[account.id] || 0)}
                 onChange={(e) => handleValueChange(month, e.target.value)}
-                disabled={disableEditing || account.category === AccountCategory.SGA_FIXED}
-                className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${disableEditing || account.category === AccountCategory.SGA_FIXED ? 'cursor-default text-gray-500' : ''}`}
+                disabled={disableEditing || isFixedExpense}
+                className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${disableEditing || isFixedExpense ? 'cursor-default text-gray-500' : ''}`}
               />
-              {account.entryType === 'transaction' && onShowDetails && !disableEditing && (
+              {account.entryType === 'transaction' && onShowDetails && !disableEditing && !isFixedExpense && (
                 <button onClick={() => onShowDetails(month, account.id, account.name)}
                   className="px-2 py-1 text-xs text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 whitespace-nowrap">
                   상세
@@ -137,3 +141,6 @@ export const AccountRow: React.FC<AccountRowProps> = ({
     </>
   );
 };
+
+
+

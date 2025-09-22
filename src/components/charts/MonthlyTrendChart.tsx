@@ -13,10 +13,10 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data }) => {
   const chartData = Object.keys(data)
     .sort()
     .map(month => ({
-      month: formatMonth(month).split(' ')[1], // "8월"
-      "총 매출": data[month].revenue,
-      "매출총이익": data[month].grossProfit,
-      "영업이익": data[month].operatingProfit,
+      month: formatMonth(month).split(' ')[1],
+      '총 매출': data[month].totalRevenue,
+      '총 지출': data[month].totalExpense,
+      '영업이익': data[month].operatingIncome,
     }));
 
   if (chartData.length < 2) {
@@ -54,7 +54,7 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data }) => {
         <Tooltip formatter={(value: number) => formatCurrency(value)} />
         <Legend />
         <Line type="monotone" dataKey="총 매출" stroke="#3b82f6" strokeWidth={2} activeDot={{ r: 8 }} />
-        <Line type="monotone" dataKey="매출총이익" stroke="#10b981" strokeWidth={2} />
+        <Line type="monotone" dataKey="총 지출" stroke="#ef4444" strokeWidth={2} />
         <Line type="monotone" dataKey="영업이익" stroke="#f59e0b" strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>

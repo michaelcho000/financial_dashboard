@@ -31,10 +31,11 @@ const DashboardPage: React.FC = () => {
         return <div>Loading...</div>;
     }
     
-    const grossProfitValue = data?.grossProfit ?? 0;
-    const operatingProfitValue = data?.operatingProfit ?? 0;
-    const isGrossProfitNegative = grossProfitValue < 0;
-    const isOperatingProfitNegative = operatingProfitValue < 0;
+    const totalRevenueValue = data?.totalRevenue ?? 0;
+    const variableExpenseValue = data?.variableExpense ?? 0;
+    const fixedExpenseValue = data?.fixedExpense ?? 0;
+    const operatingIncomeValue = data?.operatingIncome ?? 0;
+    const isOperatingIncomeNegative = operatingIncomeValue < 0;
 
     return (
         <>
@@ -49,26 +50,26 @@ const DashboardPage: React.FC = () => {
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard 
                     title="총 매출"
-                    value={formatCurrency(data?.revenue || 0)}
+                    value={formatCurrency(totalRevenueValue)}
                     icon={<DollarSignIcon />}
                 />
-                 <StatCard 
-                    title="매출총이익"
-                    value={formatCurrency(grossProfitValue, { alwaysParentheses: isGrossProfitNegative })}
-                    icon={isGrossProfitNegative ? <TrendingDownIcon /> : <TrendingUpIcon />}
-                    isNegative={isGrossProfitNegative}
+                <StatCard 
+                    title="변동비 합계"
+                    value={formatCurrency(variableExpenseValue, { alwaysParentheses: true })}
+                    icon={<TrendingDownIcon />}
+                    isNegative
                 />
-                 <StatCard 
-                    title="총 판매관리비"
-                    value={formatCurrency(data?.totalSga || 0, { alwaysParentheses: true })}
+                <StatCard 
+                    title="고정비 합계"
+                    value={formatCurrency(fixedExpenseValue, { alwaysParentheses: true })}
                     icon={<TrendingDownIcon />}
                     isNegative
                 />
                 <StatCard 
                     title="영업이익"
-                    value={formatCurrency(operatingProfitValue, { alwaysParentheses: isOperatingProfitNegative })}
-                    icon={isOperatingProfitNegative ? <TrendingDownIcon /> : <TrendingUpIcon />}
-                    isNegative={isOperatingProfitNegative}
+                    value={formatCurrency(operatingIncomeValue, { alwaysParentheses: isOperatingIncomeNegative })}
+                    icon={isOperatingIncomeNegative ? <TrendingDownIcon /> : <TrendingUpIcon />}
+                    isNegative={isOperatingIncomeNegative}
                 />
             </div>
             

@@ -18,9 +18,7 @@ export const AddAccountRow: React.FC<{
   const { addAccount } = variable;
   const allAccounts: Account[] = [
     ...statement.accounts.revenue,
-    ...statement.accounts.cogs,
-    ...statement.accounts.sgaFixed,
-    ...statement.accounts.sgaVariable,
+    ...statement.accounts.expense,
   ];
   const [name, setName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -46,7 +44,12 @@ export const AddAccountRow: React.FC<{
       if (exists) {
         alert('이미 존재하는 계정입니다.');
       } else {
-        addAccount(trimmedName, category, group);
+        addAccount({
+          name: trimmedName,
+          category,
+          group,
+          costBehavior: category === AccountCategory.EXPENSE ? 'variable' : undefined,
+        });
       }
       setName('');
       setSuggestions([]);

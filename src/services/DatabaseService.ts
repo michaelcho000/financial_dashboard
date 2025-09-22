@@ -1,4 +1,4 @@
-import { AccountCategory, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
+import { Account, AccountCategory, CostBehavior, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
 
 const DB_KEY = 'financial_app_db';
 const DB_SCHEMA_VERSION = '1.0.0'; // DB 스키마 버전 (필드 구조 변경시에만 증가)
@@ -9,69 +9,69 @@ const COST_TYPE_GROUP_LABEL: Record<FixedCostType, string> = {
     OPERATING_SERVICE: '운영 서비스 계약',
 };
 
-// 구버전 → 신버전 계정 매핑 테이블
-const ACCOUNT_MIGRATION_MAP = {
-    // 매출 계정 매핑
-    'rev-1': 'rev-1', // 카드매출 → 비급여 일반수익
-    'rev-2': 'rev-2', // 현금매출 → 멤버십/패키지
-    'rev-4': 'rev-4', // 본인부담금 → 보험 본인부담금
+const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // 매출원가 계정 매핑
-    'cogs-1': 'cogs-1', // 재료비 A → 시술 재료비
+const createExpenseAccount = (
+    id: string,
+    name: string,
+    group: string,
+    costBehavior: CostBehavior,
+    options: { isDeletable?: boolean } = {}
+): Account => ({
+    id,
+    name,
+    category: AccountCategory.EXPENSE,
+    costBehavior,
+    group,
+    isDeletable: options.isDeletable ?? true,
+    entryType: costBehavior === 'fixed' ? 'manual' : 'transaction',
+});
 
-    // 고정비 계정 매핑
-    'sga-fix-1': 'sga-fix-1', // 직원급여 → 관리직 인건비
-    'sga-fix-2': 'sga-fix-2', // 4대보험 → 4대보험료
-    'sga-fix-3': 'sga-fix-3', // 월 임차료 → 임차료
+const initialRevenueAccounts: Account[] = [
+    { id: 'rev-1', name: '비급여 일반수익', category: AccountCategory.REVENUE, group: '비급여 수익', isDeletable: true, entryType: 'transaction' },
+    { id: 'rev-2', name: '멤버십/패키지', category: AccountCategory.REVENUE, group: '비급여 수익', isDeletable: true, entryType: 'transaction' },
+    { id: 'rev-3', name: '보험 청구수익', category: AccountCategory.REVENUE, group: '보험 수익', isDeletable: true, entryType: 'transaction' },
+    { id: 'rev-4', name: '보험 본인부담금', category: AccountCategory.REVENUE, group: '보험 수익', isDeletable: true, entryType: 'transaction' },
+    { id: 'rev-5', name: '기타 수익', category: AccountCategory.REVENUE, group: '기타 수익', isDeletable: true, entryType: 'transaction' },
+];
 
-    // 변동비 계정 매핑
-    'sga-var-1': 'sga-var-3', // 복리후생비 → 교육/복지비
-    'sga-var-2': 'sga-var-1', // 마케팅비 → 마케팅/광고비
-};
+const initialExpenseAccounts: Account[] = [
+    createExpenseAccount('cogs-1', '시술 재료비', '시술 원가', 'variable'),
+    createExpenseAccount('cogs-2', '시술 직접 인건비', '직접 인건비', 'variable'),
+    createExpenseAccount('cogs-3', '외주/검사비', '외주/검사비', 'variable'),
+    createExpenseAccount('cogs-4', '멤버십 원가', '시술 원가', 'variable'),
+    createExpenseAccount('sga-var-1', '마케팅/광고비', '마케팅/운영', 'variable'),
+    createExpenseAccount('sga-var-2', '소모품/소모재', '마케팅/운영', 'variable'),
+    createExpenseAccount('sga-var-3', '교육/복지비', '인건비', 'variable'),
+    createExpenseAccount('sga-var-4', '기타 운용비', '기타 비용', 'variable'),
+    createExpenseAccount('sga-fix-1', '관리직 인건비', COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, 'fixed', { isDeletable: false }),
+    createExpenseAccount('sga-fix-2', '4대보험료', COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, 'fixed', { isDeletable: false }),
+    createExpenseAccount('sga-fix-3', '임차료', COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, 'fixed', { isDeletable: false }),
+    createExpenseAccount('sga-fix-4', '공과금/관리비', COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, 'fixed'),
+    createExpenseAccount('sga-fix-5', '감가상각/장비리스', COST_TYPE_GROUP_LABEL.ASSET_FINANCE, 'fixed'),
+];
 
-// 그룹명 매핑 테이블
-const GROUP_MIGRATION_MAP = {
-    '비급여': '비급여 수익',
-    '보험급여': '보험 수익',
-    '원재료비': '시술 원가',
-    '지급임차료': '임차/관리',
-    '기타': '기타 비용'
-};
+const initialExpenseGroups = Array.from(new Set([
+    '시술 원가',
+    '직접 인건비',
+    '외주/검사비',
+    '인건비',
+    '임차/관리',
+    '마케팅/운영',
+    '기타 비용',
+    COST_TYPE_GROUP_LABEL.OPERATING_SERVICE,
+    COST_TYPE_GROUP_LABEL.ASSET_FINANCE,
+]));
 
 const initialFinancials: Financials = {
     templateVersion: TEMPLATE_VERSION,
     accounts: {
-        revenue: [
-            { id: 'rev-1', name: '비급여 일반수익', category: AccountCategory.REVENUE, group: '비급여 수익', isDeletable: true, entryType: 'transaction' },
-            { id: 'rev-2', name: '멤버십/패키지', category: AccountCategory.REVENUE, group: '비급여 수익', isDeletable: true, entryType: 'transaction' },
-            { id: 'rev-3', name: '보험 청구수익', category: AccountCategory.REVENUE, group: '보험 수익', isDeletable: true, entryType: 'transaction' },
-            { id: 'rev-4', name: '보험 본인부담금', category: AccountCategory.REVENUE, group: '보험 수익', isDeletable: true, entryType: 'transaction' },
-            { id: 'rev-5', name: '기타 수익', category: AccountCategory.REVENUE, group: '기타 수익', isDeletable: true, entryType: 'transaction' },
-        ],
-        cogs: [
-            { id: 'cogs-1', name: '시술 재료비', category: AccountCategory.COGS, group: '시술 원가', isDeletable: true, entryType: 'transaction' },
-            { id: 'cogs-2', name: '시술 직접 인건비', category: AccountCategory.COGS, group: '직접 인건비', isDeletable: true, entryType: 'manual' },
-            { id: 'cogs-3', name: '외주/검사비', category: AccountCategory.COGS, group: '외주/검사비', isDeletable: true, entryType: 'transaction' },
-            { id: 'cogs-4', name: '멤버십 원가', category: AccountCategory.COGS, group: '시술 원가', isDeletable: true, entryType: 'transaction' },
-        ],
-        sgaFixed: [
-            { id: 'sga-fix-1', name: '관리직 인건비', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-2', name: '4대보험료', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-3', name: '임차료', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: false, entryType: 'manual' },
-            { id: 'sga-fix-4', name: '공과금/관리비', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.OPERATING_SERVICE, isDeletable: true, entryType: 'manual' },
-            { id: 'sga-fix-5', name: '감가상각/장비리스', category: AccountCategory.SGA_FIXED, group: COST_TYPE_GROUP_LABEL.ASSET_FINANCE, isDeletable: true, entryType: 'manual' },
-        ],
-        sgaVariable: [
-            { id: 'sga-var-1', name: '마케팅/광고비', category: AccountCategory.SGA_VARIABLE, group: '마케팅/운영', isDeletable: true, entryType: 'transaction' },
-            { id: 'sga-var-2', name: '소모품/소모재', category: AccountCategory.SGA_VARIABLE, group: '마케팅/운영', isDeletable: true, entryType: 'transaction' },
-            { id: 'sga-var-3', name: '교육/복지비', category: AccountCategory.SGA_VARIABLE, group: '인건비', isDeletable: true, entryType: 'transaction' },
-            { id: 'sga-var-4', name: '기타 운용비', category: AccountCategory.SGA_VARIABLE, group: '기타 비용', isDeletable: true, entryType: 'transaction' },
-        ],
+        revenue: initialRevenueAccounts,
+        expense: initialExpenseAccounts,
     },
     accountGroups: {
         revenue: ['비급여 수익', '보험 수익', '기타 수익'],
-        cogs: ['시술 원가', '직접 인건비', '외주/검사비'],
-        sga: ['인건비', '임차/관리', '마케팅/운영', '기타 비용']
+        expense: initialExpenseGroups,
     },
     transactionData: {
         '2025-08': {
@@ -103,6 +103,70 @@ const initialFinancials: Financials = {
         { id: 'fca-2025-07-fcl-5', templateId: 'fcl-5', month: '2025-07', amount: 5000000, isActive: true },
     ],
     monthlyOverrides: {},
+};
+
+const normalizeLegacyRevenueAccount = (raw: any): Account => ({
+    id: String(raw.id ?? createId('rev')),
+    name: String(raw.name ?? '미정'),
+    category: AccountCategory.REVENUE,
+    costBehavior: undefined,
+    group: raw.group ?? undefined,
+    isDeletable: raw.isDeletable !== false,
+    entryType: 'transaction',
+    isTemporary: raw.isTemporary ?? false,
+    isArchived: raw.isArchived ?? false,
+});
+
+const normalizeLegacyExpenseAccount = (raw: any, costBehavior: CostBehavior): Account => ({
+    id: String(raw.id ?? createId('exp')),
+    name: String(raw.name ?? '미정'),
+    category: AccountCategory.EXPENSE,
+    costBehavior,
+    group: raw.group ?? undefined,
+    isDeletable: raw.isDeletable !== false,
+    entryType: costBehavior === 'fixed' ? 'manual' : 'transaction',
+    isTemporary: raw.isTemporary ?? false,
+    isArchived: raw.isArchived ?? false,
+});
+
+const upgradeLegacyFinancials = (financials: Financials) => {
+    const legacy = financials as any;
+    if (Array.isArray(legacy.accounts?.expense)) {
+        return;
+    }
+
+    const revenue = Array.isArray(legacy.accounts?.revenue)
+        ? legacy.accounts.revenue.map(normalizeLegacyRevenueAccount)
+        : [];
+
+    const expense: Account[] = [];
+    const pushExpense = (items: any[] | undefined, costBehavior: CostBehavior) => {
+        (items ?? []).forEach(item => expense.push(normalizeLegacyExpenseAccount(item, costBehavior)));
+    };
+
+    pushExpense(legacy.accounts?.cogs, 'variable');
+    pushExpense(legacy.accounts?.sgaVariable, 'variable');
+    pushExpense(legacy.accounts?.sgaFixed, 'fixed');
+
+    financials.accounts = {
+        revenue,
+        expense,
+    };
+
+    const legacyGroups = legacy.accountGroups ?? {};
+    const expenseGroups = new Set<string>();
+    ['cogs', 'sga'].forEach(key => {
+        (legacyGroups[key] ?? []).forEach((group: string) => {
+            if (group && group.trim()) {
+                expenseGroups.add(group.trim());
+            }
+        });
+    });
+
+    financials.accountGroups = {
+        revenue: (legacyGroups.revenue ?? []).map((group: string) => String(group)),
+        expense: Array.from(expenseGroups),
+    };
 };
 
 const initialDb: DB = {
@@ -314,58 +378,52 @@ class DatabaseService {
 
     // 계정 데이터 마이그레이션 (매핑 테이블 사용)
     private migrateAccounts(financials: Financials) {
-        const newTemplate = this.getSettings().tenantTemplate;
+        upgradeLegacyFinancials(financials);
 
-        ['revenue', 'cogs', 'sgaFixed', 'sgaVariable'].forEach(category => {
-            const accounts = financials.accounts[category as keyof typeof financials.accounts];
-            const templateAccounts = newTemplate.accounts[category as keyof typeof newTemplate.accounts];
+        const template = this.getSettings().tenantTemplate;
+
+        const syncCategory = (category: 'revenue' | 'expense') => {
+            const accounts = financials.accounts[category];
+            const templateAccounts = template.accounts[category] ?? [];
 
             accounts.forEach(account => {
-                // 🔧 매핑 테이블을 사용하여 새 ID 찾기
-                const mappedId = ACCOUNT_MIGRATION_MAP[account.id as keyof typeof ACCOUNT_MIGRATION_MAP] || account.id;
-                const templateAccount = templateAccounts.find(ta => ta.id === mappedId);
-
+                const templateAccount = templateAccounts.find(ta => ta.id === account.id);
                 if (templateAccount) {
-                    // 계정명과 그룹명을 템플릿 기준으로 업데이트
                     account.name = templateAccount.name;
                     account.group = templateAccount.group;
-                    console.log(`  ✅ Account updated: ${account.id} → ${templateAccount.name}`);
-                } else {
-                    console.log(`  ⚠️ Template account not found for: ${account.id} (mapped to ${mappedId})`);
+                    account.costBehavior = templateAccount.costBehavior;
+                    account.entryType = templateAccount.entryType;
                 }
             });
 
-            // 🔧 새 템플릿에만 있는 계정들 추가
             templateAccounts.forEach(templateAccount => {
-                const exists = accounts.find(acc => acc.id === templateAccount.id);
-                if (!exists) {
-                    accounts.push({...templateAccount});
-                    console.log(`  ➕ New account added: ${templateAccount.id} - ${templateAccount.name}`);
+                if (!accounts.find(acc => acc.id === templateAccount.id)) {
+                    accounts.push({ ...templateAccount });
                 }
             });
-        });
+        };
+
+        syncCategory('revenue');
+        syncCategory('expense');
     }
 
-    // 그룹 데이터 마이그레이션 (기존 커스텀 그룹 보존)
     private migrateAccountGroups(financials: Financials) {
-        const newTemplate = this.getSettings().tenantTemplate;
+        upgradeLegacyFinancials(financials);
 
-        // 🔧 기존 커스텀 그룹 보존하면서 새 템플릿 그룹 병합
-        ['revenue', 'cogs', 'sga'].forEach(category => {
-            const existingGroups = financials.accountGroups[category as keyof typeof financials.accountGroups] || [];
-            const templateGroups = newTemplate.accountGroups[category as keyof typeof newTemplate.accountGroups];
+        const template = this.getSettings().tenantTemplate;
 
-            // 기존 그룹명을 매핑된 이름으로 업데이트
-            const updatedGroups = existingGroups.map(group =>
-                GROUP_MIGRATION_MAP[group as keyof typeof GROUP_MIGRATION_MAP] || group
-            );
+        const mergeGroups = (category: 'revenue' | 'expense') => {
+            const existing = new Set<string>((financials.accountGroups[category] ?? []).map(group => group.trim()).filter(Boolean));
+            (template.accountGroups[category] ?? []).forEach(group => {
+                if (group && group.trim()) {
+                    existing.add(group.trim());
+                }
+            });
+            financials.accountGroups[category] = Array.from(existing);
+        };
 
-            // 중복 제거하고 새 템플릿 그룹 추가
-            const mergedGroups = [...new Set([...updatedGroups, ...templateGroups])];
-            financials.accountGroups[category as keyof typeof financials.accountGroups] = mergedGroups;
-
-            console.log(`  🔄 Groups updated for ${category}: ${mergedGroups.join(', ')}`);
-        });
+        mergeGroups('revenue');
+        mergeGroups('expense');
     }
 
     // 고정비 구조 마이그레이션
@@ -435,15 +493,18 @@ class DatabaseService {
             }
         });
 
-        financials.accounts.sgaFixed = financials.accounts.sgaFixed.map(account => {
-            const linkedTemplate = financials.fixedCostTemplates.find(t => t.accountId === account.id);
-            if (linkedTemplate) {
-                return {
-                    ...account,
-                    group: COST_TYPE_GROUP_LABEL[linkedTemplate.costType],
-                };
+        financials.accounts.expense = financials.accounts.expense.map(account => {
+            if (account.costBehavior !== 'fixed') {
+                return account;
             }
-            return account;
+            const linkedTemplate = financials.fixedCostTemplates.find(t => t.accountId === account.id);
+            if (!linkedTemplate) {
+                return account;
+            }
+            return {
+                ...account,
+                group: COST_TYPE_GROUP_LABEL[linkedTemplate.costType],
+            };
         });
 
         // 레거시 필드 정리

@@ -7,7 +7,7 @@ import { useFinancials } from '../../contexts/FinancialDataContext';
 
 export const EditableGroupName: React.FC<{
   groupName: string;
-  type: 'revenue' | 'cogs' | 'sga';
+  type: 'revenue' | 'expense';
 }> = ({
   groupName,
   type,

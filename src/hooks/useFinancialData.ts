@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Account,
   AccountCategory,
+  AccountGroups,
+  CalculatedMonthData,
+  CostBehavior,
+  Financials,
   FixedCostActual,
   FixedCostTemplate,
   FixedCostType,
@@ -14,6 +18,14 @@ import {
 } from '../types';
 import DatabaseService from '../services/DatabaseService';
 
+const LEGACY_COST_BEHAVIOR_MAP: Record<string, CostBehavior> = {
+  COGS: 'variable',
+  SGA_VARIABLE: 'variable',
+  SGA_FIXED: 'fixed',
+};
+
+const LEGACY_EXPENSE_CATEGORIES = new Set(Object.keys(LEGACY_COST_BEHAVIOR_MAP));
+
 const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const COST_TYPE_GROUP: Record<FixedCostType, string> = {
@@ -21,12 +33,148 @@ const COST_TYPE_GROUP: Record<FixedCostType, string> = {
   OPERATING_SERVICE: '운영 서비스 계약',
 };
 
+const normalizeAccount = (raw: any): Account => {
+  if (!raw) {
+    throw new Error('Invalid account data');
+  }
+
+  const legacyCategory = typeof raw.category === 'string' ? raw.category : undefined;
+  let category: AccountCategory = AccountCategory.REVENUE;
+  let costBehavior: CostBehavior | undefined;
+  let entryType: 'manual' | 'transaction' = raw.entryType === 'manual' ? 'manual' : 'transaction';
+
+  if (legacyCategory === AccountCategory.REVENUE) {
+    category = AccountCategory.REVENUE;
+    costBehavior = undefined;
+    entryType = 'transaction';
+  } else if (legacyCategory === AccountCategory.EXPENSE) {
+    category = AccountCategory.EXPENSE;
+    costBehavior = raw.costBehavior === 'fixed' ? 'fixed' : 'variable';
+    entryType = costBehavior === 'fixed' ? 'manual' : 'transaction';
+  } else if (legacyCategory && LEGACY_EXPENSE_CATEGORIES.has(legacyCategory)) {
+    category = AccountCategory.EXPENSE;
+    costBehavior = LEGACY_COST_BEHAVIOR_MAP[legacyCategory] ?? 'variable';
+    entryType = costBehavior === 'fixed' ? 'manual' : 'transaction';
+  } else {
+    // fallback: treat as revenue
+    category = AccountCategory.REVENUE;
+    costBehavior = undefined;
+    entryType = 'transaction';
+  }
+
+  return {
+    id: String(raw.id ?? createId('acct')),
+    name: String(raw.name ?? '미정'),
+    category,
+    costBehavior,
+    group: raw.group ?? undefined,
+    isDeletable: raw.isDeletable !== false,
+    entryType,
+    isTemporary: raw.isTemporary ?? false,
+    isArchived: raw.isArchived ?? false,
+  };
+};
+
+const normalizeAccountArray = (items: any[] | undefined): Account[] => (
+  Array.isArray(items) ? items.map(normalizeAccount) : []
+);
+
+const mergeUniqueStrings = (...arrays: (string[] | undefined)[]): string[] => {
+  const set = new Set<string>();
+  arrays.forEach(list => {
+    (list ?? []).forEach(item => {
+      if (item && item.trim()) {
+        set.add(item.trim());
+      }
+    });
+  });
+  return Array.from(set);
+};
+
+const normalizeMonthlyOverrides = (overrides: MonthlyAccountOverrides | undefined): MonthlyAccountOverrides => {
+  if (!overrides) {
+    return {};
+  }
+
+  const normalized: MonthlyAccountOverrides = {};
+  Object.entries(overrides).forEach(([month, value]) => {
+    if (!value) return;
+    normalized[month] = {
+      addedAccounts: normalizeAccountArray(value.addedAccounts),
+    };
+  });
+  return normalized;
+};
+
+const normalizeFinancials = (raw: any): Financials => {
+  if (!raw) {
+    return {
+      templateVersion: undefined,
+      accounts: {
+        revenue: [],
+        expense: [],
+      },
+      accountGroups: {
+        revenue: [],
+        expense: [],
+      },
+      transactionData: {},
+      manualData: {},
+      fixedCostTemplates: [],
+      fixedCostActuals: [],
+      monthlyOverrides: {},
+    };
+  }
+
+  const revenueAccounts = normalizeAccountArray(raw.accounts?.revenue);
+
+  let expenseAccounts: Account[] = [];
+  if (Array.isArray(raw.accounts?.expense)) {
+    expenseAccounts = normalizeAccountArray(raw.accounts?.expense)
+      .map(account => ({
+        ...account,
+        category: AccountCategory.EXPENSE,
+        costBehavior: account.costBehavior === 'fixed' ? 'fixed' : 'variable',
+        entryType: account.costBehavior === 'fixed' ? 'manual' : 'transaction',
+      }));
+  } else {
+    const legacyExpense = [
+      ...(raw.accounts?.cogs ?? []),
+      ...(raw.accounts?.sgaFixed ?? []),
+      ...(raw.accounts?.sgaVariable ?? []),
+    ];
+    expenseAccounts = normalizeAccountArray(legacyExpense);
+  }
+
+  const accountGroups: AccountGroups = {
+    revenue: mergeUniqueStrings(raw.accountGroups?.revenue),
+    expense: Array.isArray(raw.accountGroups?.expense)
+      ? mergeUniqueStrings(raw.accountGroups?.expense)
+      : mergeUniqueStrings(raw.accountGroups?.cogs, raw.accountGroups?.sga),
+  };
+
+  return {
+    templateVersion: raw.templateVersion,
+    accounts: {
+      revenue: revenueAccounts,
+      expense: expenseAccounts,
+    },
+    accountGroups,
+    transactionData: raw.transactionData ?? {},
+    manualData: raw.manualData ?? {},
+    fixedCostTemplates: raw.fixedCostTemplates ?? [],
+    fixedCostActuals: raw.fixedCostActuals ?? [],
+    monthlyOverrides: normalizeMonthlyOverrides(raw.monthlyOverrides),
+  };
+};
+
 const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn | null => {
-  const [financials, setFinancials] = useState(tenantId ? DatabaseService.getFinancials(tenantId) : null);
+  const [financials, setFinancials] = useState<Financials | null>(tenantId ? normalizeFinancials(DatabaseService.getFinancials(tenantId)) : null);
 
   useEffect(() => {
     if (tenantId) {
-      setFinancials(DatabaseService.getFinancials(tenantId));
+      const raw = DatabaseService.getFinancials(tenantId);
+      setFinancials(normalizeFinancials(raw));
     }
   }, [tenantId]);
 
@@ -46,17 +194,14 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     transactionData,
     manualData,
     monthlyOverrides = {},
+    fixedCostTemplates = [],
+    fixedCostActuals = [],
   } = financials;
-
-  const fixedCostTemplates = financials.fixedCostTemplates ?? [];
-  const fixedCostActuals = financials.fixedCostActuals ?? [];
 
   const allAccounts = useMemo(() => (
     [
       ...accounts.revenue,
-      ...accounts.cogs,
-      ...accounts.sgaFixed,
-      ...accounts.sgaVariable,
+      ...accounts.expense,
     ]
   ), [accounts]);
 
@@ -92,33 +237,27 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
 
       result[month] = {};
 
-      for (const acc of allAccounts) {
-        let value = 0;
+      const computeValue = (acc: Account) => {
         if (acc.entryType === 'transaction') {
           const transactions = transactionData[month]?.[acc.id] || [];
-          value = transactions.reduce((sum, t) => sum + t.amount, 0);
-        } else if (acc.category === AccountCategory.SGA_FIXED) {
-          value = fixedCostValueByMonth[month]?.[acc.id] || 0;
-        } else {
-          value = manualData[month]?.[acc.id] ?? 0;
+          return transactions.reduce((sum, t) => sum + t.amount, 0);
         }
-
-        result[month][acc.id] = value;
-      }
-
-      for (const tempAcc of addedAccounts) {
-        let value = 0;
-        if (tempAcc.entryType === 'transaction') {
-          const transactions = transactionData[month]?.[tempAcc.id] || [];
-          value = transactions.reduce((sum, t) => sum + t.amount, 0);
-        } else if (tempAcc.category === AccountCategory.SGA_FIXED) {
-          value = fixedCostValueByMonth[month]?.[tempAcc.id] || 0;
-        } else {
-          value = manualData[month]?.[tempAcc.id] ?? 0;
+        if (acc.category === AccountCategory.EXPENSE && acc.costBehavior === 'fixed') {
+          const fixedValue = fixedCostValueByMonth[month]?.[acc.id];
+          if (typeof fixedValue === 'number') {
+            return fixedValue;
+          }
         }
+        return manualData[month]?.[acc.id] ?? 0;
+      };
 
-        result[month][tempAcc.id] = value;
-      }
+      allAccounts.forEach(acc => {
+        result[month][acc.id] = computeValue(acc);
+      });
+
+      addedAccounts.forEach(acc => {
+        result[month][acc.id] = computeValue(acc);
+      });
     }
 
     return result;
@@ -133,32 +272,28 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       const monthAccountValues = accountValues[month] || {};
       const getValById = (accountId: string) => monthAccountValues[accountId] || 0;
 
-      const revenue = accounts.revenue.reduce((sum, acc) => sum + getValById(acc.id), 0)
+      const totalRevenue = accounts.revenue.reduce((sum, acc) => sum + getValById(acc.id), 0)
         + addedAccounts
           .filter(acc => acc.category === AccountCategory.REVENUE)
           .reduce((sum, acc) => sum + getValById(acc.id), 0);
 
-      const cogs = accounts.cogs.reduce((sum, acc) => sum + getValById(acc.id), 0)
-        + addedAccounts
-          .filter(acc => acc.category === AccountCategory.COGS)
-          .reduce((sum, acc) => sum + getValById(acc.id), 0);
+      let variableExpense = 0;
+      let fixedExpense = 0;
 
-      const sgaFixed = accounts.sgaFixed.reduce((sum, acc) => sum + getValById(acc.id), 0)
-        + addedAccounts
-          .filter(acc => acc.category === AccountCategory.SGA_FIXED)
-          .reduce((sum, acc) => sum + getValById(acc.id), 0);
+      const expenseCandidates = accounts.expense.concat(addedAccounts.filter(acc => acc.category === AccountCategory.EXPENSE));
+      expenseCandidates.forEach(acc => {
+        const value = getValById(acc.id);
+        if (acc.costBehavior === 'fixed') {
+          fixedExpense += value;
+        } else {
+          variableExpense += value;
+        }
+      });
 
-      const sgaVariable = accounts.sgaVariable.reduce((sum, acc) => sum + getValById(acc.id), 0)
-        + addedAccounts
-          .filter(acc => acc.category === AccountCategory.SGA_VARIABLE)
-          .reduce((sum, acc) => sum + getValById(acc.id), 0);
+      const totalExpense = variableExpense + fixedExpense;
+      const operatingIncome = totalRevenue - totalExpense;
 
-      const totalSga = sgaFixed + sgaVariable;
-      const grossProfit = revenue - cogs;
-      const cogsRatio = revenue === 0 ? 0 : (cogs / revenue) * 100;
-      const operatingProfit = grossProfit - totalSga;
-
-      const groupSubtotals: { [groupName: string]: number } = {};
+      const groupSubtotals: CalculatedMonthData['groupSubtotals'] = {};
       [...allAccounts, ...addedAccounts].forEach(acc => {
         if (!acc.group) return;
         if (!groupSubtotals[acc.group]) {
@@ -168,14 +303,11 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       });
 
       result[month] = {
-        revenue,
-        cogs,
-        grossProfit,
-        cogsRatio,
-        sgaFixed,
-        sgaVariable,
-        totalSga,
-        operatingProfit,
+        totalRevenue,
+        variableExpense,
+        fixedExpense,
+        totalExpense,
+        operatingIncome,
         groupSubtotals,
       };
     }
@@ -186,26 +318,21 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
   const saveVariableStructure = useCallback((payload: {
     accounts: {
       revenue: Account[];
-      cogs: Account[];
-      sgaVariable: Account[];
+      expense: Account[];
     };
-    accountGroups: typeof accountGroups;
+    accountGroups: AccountGroups;
   }) => {
     setFinancials(prev => {
       if (!prev) return null;
 
-      const { accounts: nextAccountsInput, accountGroups: nextGroups } = payload;
-      const buildNextCategory = (key: 'revenue' | 'cogs' | 'sgaVariable') => {
-        const previousList = prev.accounts[key];
-        const incomingList = nextAccountsInput[key];
-        const incomingMap = new Map(incomingList.map(acc => [acc.id, acc]));
-
+      const mergeAccounts = (previousList: Account[], incomingList: Account[]) => {
+        const incomingMap = new Map(incomingList.map(acc => [acc.id, normalizeAccount(acc)]));
         const result: Account[] = [];
 
         previousList.forEach(acc => {
           if (incomingMap.has(acc.id)) {
-            const incoming = incomingMap.get(acc.id)!;
-            result.push({ ...acc, ...incoming, isArchived: false });
+            const next = incomingMap.get(acc.id)!;
+            result.push({ ...acc, ...next, isArchived: false });
             incomingMap.delete(acc.id);
           } else {
             result.push({ ...acc, isArchived: true });
@@ -219,84 +346,86 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
         return result;
       };
 
-      const nextRevenue = buildNextCategory('revenue');
-      const nextCogs = buildNextCategory('cogs');
-      const nextSgaVariable = buildNextCategory('sgaVariable');
+      return {
+        ...prev,
+        accounts: {
+          revenue: mergeAccounts(prev.accounts.revenue, payload.accounts.revenue),
+          expense: mergeAccounts(prev.accounts.expense, payload.accounts.expense),
+        },
+        accountGroups: payload.accountGroups,
+      };
+    });
+  }, []);
+
+  const addAccount = useCallback((payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => {
+    const trimmed = payload.name.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const category = payload.category === AccountCategory.EXPENSE ? AccountCategory.EXPENSE : AccountCategory.REVENUE;
+    const normalizedCostBehavior = category === AccountCategory.EXPENSE ? (payload.costBehavior === 'fixed' ? 'fixed' : 'variable') : undefined;
+    const entryType: Account['entryType'] = category === AccountCategory.EXPENSE
+      ? (normalizedCostBehavior === 'fixed' ? 'manual' : 'transaction')
+      : 'transaction';
+
+    const newAccount: Account = {
+      id: createId(category === AccountCategory.EXPENSE ? 'exp' : 'rev'),
+      name: trimmed,
+      category,
+      costBehavior: normalizedCostBehavior,
+      group: payload.group,
+      isDeletable: true,
+      entryType,
+    };
+
+    setFinancials(prev => prev ? {
+      ...prev,
+      accounts: {
+        revenue: category === AccountCategory.REVENUE ? [...prev.accounts.revenue, newAccount] : prev.accounts.revenue,
+        expense: category === AccountCategory.EXPENSE ? [...prev.accounts.expense, newAccount] : prev.accounts.expense,
+      },
+    } : prev);
+  }, []);
+
+  const removeAccount = useCallback((accountId: string) => {
+    setFinancials(prev => {
+      if (!prev) return null;
+
+      const target = [...prev.accounts.revenue, ...prev.accounts.expense].find(acc => acc.id === accountId);
+      if (!target) {
+        return prev;
+      }
+
+      const cleanupData = <T extends Record<string, Record<string, any>>>(data: T): T => {
+        const nextData: Record<string, Record<string, any>> = {};
+        Object.entries(data).forEach(([month, monthData]) => {
+          const { [accountId]: _removed, ...rest } = monthData || {};
+          nextData[month] = rest;
+        });
+        return nextData as T;
+      };
+
+      const nextTemplates = target.costBehavior === 'fixed'
+        ? (prev.fixedCostTemplates ?? []).filter(template => template.accountId !== accountId)
+        : (prev.fixedCostTemplates ?? []);
+
+      const removedTemplateIds = (prev.fixedCostTemplates ?? [])
+        .filter(template => template.accountId === accountId)
+        .map(template => template.id);
+
+      const nextActuals = target.costBehavior === 'fixed'
+        ? (prev.fixedCostActuals ?? []).filter(actual => !removedTemplateIds.includes(actual.templateId))
+        : (prev.fixedCostActuals ?? []);
 
       return {
         ...prev,
         accounts: {
-          ...prev.accounts,
-          revenue: nextRevenue,
-          cogs: nextCogs,
-          sgaVariable: nextSgaVariable,
+          revenue: prev.accounts.revenue.filter(acc => acc.id !== accountId),
+          expense: prev.accounts.expense.filter(acc => acc.id !== accountId),
         },
-        accountGroups: nextGroups,
-      };
-    });
-  }, []);
-
-  const addAccount = useCallback((name: string, category: AccountCategory, group: string) => {
-    const newAccount: Account = {
-      id: `${category.toLowerCase()}-${Date.now()}`,
-      name,
-      category,
-      group,
-      isDeletable: true,
-      entryType: category === AccountCategory.SGA_FIXED ? 'manual' : 'transaction',
-    };
-
-    setFinancials(prev => {
-      if (!prev) return null;
-      const nextAccounts = { ...prev.accounts };
-
-      if (category === AccountCategory.REVENUE) nextAccounts.revenue = [...prev.accounts.revenue, newAccount];
-      if (category === AccountCategory.COGS) nextAccounts.cogs = [...prev.accounts.cogs, newAccount];
-      if (category === AccountCategory.SGA_FIXED) nextAccounts.sgaFixed = [...prev.accounts.sgaFixed, newAccount];
-      if (category === AccountCategory.SGA_VARIABLE) nextAccounts.sgaVariable = [...prev.accounts.sgaVariable, newAccount];
-
-      return {
-        ...prev,
-        accounts: nextAccounts,
-      };
-    });
-  }, []);
-
-  const removeAccount = useCallback((id: string, category: AccountCategory) => {
-    setFinancials(prev => {
-      if (!prev) return null;
-
-      const nextAccounts = { ...prev.accounts };
-      if (category === AccountCategory.REVENUE) nextAccounts.revenue = prev.accounts.revenue.filter(acc => acc.id !== id);
-      if (category === AccountCategory.COGS) nextAccounts.cogs = prev.accounts.cogs.filter(acc => acc.id !== id);
-      if (category === AccountCategory.SGA_FIXED) nextAccounts.sgaFixed = prev.accounts.sgaFixed.filter(acc => acc.id !== id);
-      if (category === AccountCategory.SGA_VARIABLE) nextAccounts.sgaVariable = prev.accounts.sgaVariable.filter(acc => acc.id !== id);
-
-      const cleanupData = (data: typeof prev.manualData | typeof prev.transactionData) => {
-        const nextData: Record<string, any> = {};
-        Object.entries(data).forEach(([month, monthData]) => {
-          const { [id]: _removed, ...rest } = monthData;
-          nextData[month] = rest;
-        });
-        return nextData;
-      };
-
-      const nextManual = cleanupData(prev.manualData as any);
-      const nextTransactions = cleanupData(prev.transactionData as any);
-
-      let nextTemplates = prev.fixedCostTemplates ?? [];
-      let nextActuals = prev.fixedCostActuals ?? [];
-      if (category === AccountCategory.SGA_FIXED) {
-        const targetTemplateIds = (prev.fixedCostTemplates ?? []).filter(template => template.accountId === id).map(template => template.id);
-        nextTemplates = (prev.fixedCostTemplates ?? []).filter(template => template.accountId !== id);
-        nextActuals = (prev.fixedCostActuals ?? []).filter(actual => !targetTemplateIds.includes(actual.templateId));
-      }
-
-      return {
-        ...prev,
-        accounts: nextAccounts,
-        manualData: nextManual,
-        transactionData: nextTransactions,
+        manualData: cleanupData(prev.manualData),
+        transactionData: cleanupData(prev.transactionData),
         fixedCostTemplates: nextTemplates,
         fixedCostActuals: nextActuals,
       };
@@ -307,51 +436,42 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     setFinancials(prev => {
       if (!prev) return null;
 
-      const apply = (accs: Account[]) => accs.map(acc => (
+      const rename = (accs: Account[]) => accs.map(acc => (
         acc.id === accountId ? { ...acc, ...updates } : acc
       ));
 
-      const nextAccounts = {
-        revenue: apply(prev.accounts.revenue),
-        cogs: apply(prev.accounts.cogs),
-        sgaFixed: apply(prev.accounts.sgaFixed),
-        sgaVariable: apply(prev.accounts.sgaVariable),
-      };
+      const nextRevenue = rename(prev.accounts.revenue);
+      const nextExpense = rename(prev.accounts.expense);
 
-      const renamedAccount = nextAccounts.sgaFixed.find(acc => acc.id === accountId);
-      const shouldSyncTemplateName = updates.name && renamedAccount && renamedAccount.category === AccountCategory.SGA_FIXED;
-      const templatesSource = prev.fixedCostTemplates ?? [];
-      const nextTemplates = shouldSyncTemplateName
-        ? templatesSource.map(template => (
-            template.accountId === accountId
-              ? { ...template, serviceName: updates.name as string }
-              : template
+      const isFixedExpense = nextExpense.some(acc => acc.id === accountId && acc.costBehavior === 'fixed');
+      const nextTemplates = isFixedExpense && updates.name
+        ? (prev.fixedCostTemplates ?? []).map(template => (
+            template.accountId === accountId ? { ...template, serviceName: updates.name as string } : template
           ))
-        : templatesSource;
+        : (prev.fixedCostTemplates ?? []);
 
       return {
         ...prev,
-        accounts: nextAccounts,
+        accounts: {
+          revenue: nextRevenue,
+          expense: nextExpense,
+        },
         fixedCostTemplates: nextTemplates,
       };
     });
   }, []);
 
   const updateManualAccountValue = useCallback((month: string, accountId: string, value: number) => {
-    setFinancials(prev => {
-      if (!prev) return null;
-
-      return {
-        ...prev,
-        manualData: {
-          ...prev.manualData,
-          [month]: {
-            ...(prev.manualData[month] || {}),
-            [accountId]: value,
-          },
+    setFinancials(prev => prev ? {
+      ...prev,
+      manualData: {
+        ...prev.manualData,
+        [month]: {
+          ...(prev.manualData[month] || {}),
+          [accountId]: value,
         },
-      };
-    });
+      },
+    } : prev);
   }, []);
 
   const setTransactionAccountTotal = useCallback((month: string, accountId: string, totalAmount: number, accountName: string) => {
@@ -407,7 +527,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
         transactionData: {
           ...prev.transactionData,
           [month]: {
-            ...prev.transactionData[month],
+            ...(prev.transactionData[month] || {}),
             [accountId]: monthData.filter(t => t.id !== transactionId),
           },
         },
@@ -436,29 +556,28 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     });
   }, []);
 
-  const addAccountGroup = useCallback((groupName: string, type: 'revenue' | 'cogs' | 'sga') => {
+  const addAccountGroup = useCallback((groupName: string, type: 'revenue' | 'expense') => {
     setFinancials(prev => {
-      if (!prev || !groupName.trim() || prev.accountGroups[type].includes(groupName.trim())) return prev;
+      if (!prev) return prev;
+      const trimmed = groupName.trim();
+      if (!trimmed || prev.accountGroups[type].includes(trimmed)) {
+        return prev;
+      }
 
       return {
         ...prev,
         accountGroups: {
           ...prev.accountGroups,
-          [type]: [...prev.accountGroups[type], groupName.trim()],
+          [type]: [...prev.accountGroups[type], trimmed],
         },
       };
     });
   }, []);
 
-  const removeAccountGroup = useCallback((groupName: string, type: 'revenue' | 'cogs' | 'sga') => {
+  const removeAccountGroup = useCallback((groupName: string, type: 'revenue' | 'expense') => {
     setFinancials(prev => {
       if (!prev) return null;
-      const hasMembers = [
-        ...prev.accounts.revenue,
-        ...prev.accounts.cogs,
-        ...prev.accounts.sgaFixed,
-        ...prev.accounts.sgaVariable,
-      ].some(acc => acc.group === groupName);
+      const hasMembers = [...prev.accounts.revenue, ...prev.accounts.expense].some(acc => acc.group === groupName);
 
       if (hasMembers) {
         console.error('Cannot delete group with accounts.');
@@ -475,33 +594,28 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     });
   }, []);
 
-  const updateGroupName = useCallback((oldName: string, newName: string, type: 'revenue' | 'cogs' | 'sga') => {
-    if (!newName || oldName === newName) return;
+  const updateGroupName = useCallback((oldName: string, newName: string, type: 'revenue' | 'expense') => {
+    const trimmed = newName.trim();
+    if (!trimmed || oldName === trimmed) return;
 
     setFinancials(prev => {
       if (!prev) return null;
 
-      const renameGroup = (groups: string[]) => groups.map(group => (group === oldName ? newName : group));
+      const renameGroup = (groups: string[]) => groups.map(group => (group === oldName ? trimmed : group));
       const renameAccounts = (accs: Account[]) => accs.map(acc => (
-        acc.group === oldName ? { ...acc, group: newName } : acc
+        acc.group === oldName ? { ...acc, group: trimmed } : acc
       ));
-
-      const nextGroups = {
-        ...prev.accountGroups,
-        [type]: renameGroup(prev.accountGroups[type]),
-      };
-
-      const nextAccounts = {
-        revenue: type === 'revenue' ? renameAccounts(prev.accounts.revenue) : prev.accounts.revenue,
-        cogs: type === 'cogs' ? renameAccounts(prev.accounts.cogs) : prev.accounts.cogs,
-        sgaFixed: type === 'sga' ? renameAccounts(prev.accounts.sgaFixed) : prev.accounts.sgaFixed,
-        sgaVariable: type === 'sga' ? renameAccounts(prev.accounts.sgaVariable) : prev.accounts.sgaVariable,
-      };
 
       return {
         ...prev,
-        accountGroups: nextGroups,
-        accounts: nextAccounts,
+        accountGroups: {
+          ...prev.accountGroups,
+          [type]: renameGroup(prev.accountGroups[type]),
+        },
+        accounts: {
+          revenue: type === 'revenue' ? renameAccounts(prev.accounts.revenue) : prev.accounts.revenue,
+          expense: type === 'expense' ? renameAccounts(prev.accounts.expense) : prev.accounts.expense,
+        },
       };
     });
   }, []);
@@ -532,10 +646,45 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
   const removeFixedCostTemplate = useCallback((itemId: string) => {
     setFinancials(prev => {
       if (!prev) return null;
+
+      const templates = prev.fixedCostTemplates ?? [];
+      const templateToRemove = templates.find(template => template.id === itemId);
+      const nextTemplates = templates.filter(template => template.id !== itemId);
+      const nextActuals = (prev.fixedCostActuals ?? []).filter(actual => actual.templateId !== itemId);
+
+      if (!templateToRemove) {
+        return {
+          ...prev,
+          fixedCostTemplates: nextTemplates,
+          fixedCostActuals: nextActuals,
+        };
+      }
+
+      const { accountId } = templateToRemove;
+      const hasSiblingTemplate = nextTemplates.some(template => template.accountId === accountId);
+
+      const cleanData = <T extends Record<string, Record<string, any>>>(data: T): T => {
+        const result: Record<string, Record<string, any>> = {};
+        Object.entries(data).forEach(([month, monthData]) => {
+          const { [accountId]: _removed, ...rest } = monthData || {};
+          result[month] = rest;
+        });
+        return result as T;
+      };
+
       return {
         ...prev,
-        fixedCostTemplates: (prev.fixedCostTemplates ?? []).filter(template => template.id !== itemId),
-        fixedCostActuals: (prev.fixedCostActuals ?? []).filter(actual => actual.templateId !== itemId),
+        accounts: {
+          ...prev.accounts,
+          expense: hasSiblingTemplate
+            ? prev.accounts.expense
+            : prev.accounts.expense.filter(acc => acc.id !== accountId),
+          revenue: prev.accounts.revenue,
+        },
+        manualData: hasSiblingTemplate ? prev.manualData : cleanData(prev.manualData),
+        transactionData: hasSiblingTemplate ? prev.transactionData : cleanData(prev.transactionData),
+        fixedCostTemplates: nextTemplates,
+        fixedCostActuals: nextActuals,
       };
     });
   }, []);
@@ -584,11 +733,16 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
   }, []);
 
   const createFixedAccount = useCallback((name: string, costType: FixedCostType) => {
-    const trimmedName = name.trim();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return '';
+    }
+
     const account: Account = {
-      id: createId('sga-fix'),
-      name: trimmedName,
-      category: AccountCategory.SGA_FIXED,
+      id: createId('exp-fix'),
+      name: trimmed,
+      category: AccountCategory.EXPENSE,
+      costBehavior: 'fixed',
       group: COST_TYPE_GROUP[costType],
       isDeletable: true,
       entryType: 'manual',
@@ -596,11 +750,22 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
 
     setFinancials(prev => {
       if (!prev) return null;
+
+      const ensureGroupExists = (groups: string[]) => (
+        account.group && !groups.includes(account.group)
+          ? [...groups, account.group]
+          : groups
+      );
+
       return {
         ...prev,
         accounts: {
           ...prev.accounts,
-          sgaFixed: [...prev.accounts.sgaFixed, account],
+          expense: [...prev.accounts.expense, account],
+        },
+        accountGroups: {
+          ...prev.accountGroups,
+          expense: ensureGroupExists(prev.accountGroups.expense),
         },
       };
     });
@@ -608,24 +773,26 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     return account.id;
   }, []);
 
-  const addMonthlyAccount = useCallback((month: string, payload: { name: string; category: AccountCategory; group: string; entryType?: 'manual' | 'transaction' }) => {
-    const trimmedName = payload.name.trim();
-    if (!month || !trimmedName) {
+  const addMonthlyAccount = useCallback((month: string, payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => {
+    const trimmed = payload.name.trim();
+    if (!month || !trimmed) {
       return '';
     }
 
-    const allowedCategories = [AccountCategory.REVENUE, AccountCategory.COGS, AccountCategory.SGA_VARIABLE];
-    if (!allowedCategories.includes(payload.category)) {
-      return '';
-    }
+    const category = payload.category === AccountCategory.EXPENSE ? AccountCategory.EXPENSE : AccountCategory.REVENUE;
+    const costBehavior = category === AccountCategory.EXPENSE ? (payload.costBehavior === 'fixed' ? 'fixed' : 'variable') : undefined;
+    const entryType: Account['entryType'] = category === AccountCategory.EXPENSE
+      ? (costBehavior === 'fixed' ? 'manual' : 'transaction')
+      : 'transaction';
 
     const newAccount: Account = {
-      id: createId(`temp-${payload.category.toLowerCase()}`),
-      name: trimmedName,
-      category: payload.category,
+      id: createId(`temp-${category === AccountCategory.EXPENSE ? 'exp' : 'rev'}`),
+      name: trimmed,
+      category,
+      costBehavior,
       group: payload.group,
       isDeletable: true,
-      entryType: payload.entryType || 'transaction',
+      entryType,
       isTemporary: true,
     };
 
@@ -688,22 +855,23 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
         },
       };
 
-      const nextManual = { ...prev.manualData };
-      if (nextManual[month]) {
-        const { [accountId]: _removed, ...rest } = nextManual[month];
-        nextManual[month] = rest;
-      }
-
-      const nextTransactions = { ...prev.transactionData };
-      if (nextTransactions[month]) {
-        const { [accountId]: _removed, ...rest } = nextTransactions[month];
-        nextTransactions[month] = rest as any;
-      }
+      const cleanData = <T extends Record<string, Record<string, any>>>(data: T): T => {
+        const nextData: Record<string, Record<string, any>> = {};
+        Object.entries(data).forEach(([m, monthData]) => {
+          if (m !== month) {
+            nextData[m] = monthData;
+            return;
+          }
+          const { [accountId]: _removed, ...rest } = monthData || {};
+          nextData[m] = rest;
+        });
+        return nextData as T;
+      };
 
       return {
         ...prev,
-        manualData: nextManual,
-        transactionData: nextTransactions,
+        manualData: cleanData(prev.manualData),
+        transactionData: cleanData(prev.transactionData),
         monthlyOverrides: nextOverrides,
       };
     });
@@ -712,8 +880,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
   const variableState: VariableAccountsState = useMemo(() => ({
     accounts: {
       revenue: accounts.revenue.filter(acc => !acc.isArchived),
-      cogs: accounts.cogs.filter(acc => !acc.isArchived),
-      sgaVariable: accounts.sgaVariable.filter(acc => !acc.isArchived),
+      expense: accounts.expense.filter(acc => !acc.isArchived),
     },
     accountGroups,
     transactionData,
@@ -732,8 +899,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     removeAccountGroup,
   }), [
     accounts.revenue,
-    accounts.cogs,
-    accounts.sgaVariable,
+    accounts.expense,
     accountGroups,
     transactionData,
     manualData,
@@ -751,8 +917,13 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     removeAccountGroup,
   ]);
 
+  const fixedExpenseAccounts = useMemo(
+    () => accounts.expense.filter(acc => acc.costBehavior === 'fixed' && !acc.isArchived),
+    [accounts.expense],
+  );
+
   const fixedState: FixedCostsState = useMemo(() => ({
-    accounts: accounts.sgaFixed,
+    accounts: fixedExpenseAccounts,
     templates: fixedCostTemplates,
     actuals: fixedCostActuals,
     addTemplate: addFixedCostTemplate,
@@ -763,7 +934,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     updateAccount,
     createAccount: createFixedAccount,
   }), [
-    accounts.sgaFixed,
+    fixedExpenseAccounts,
     fixedCostTemplates,
     fixedCostActuals,
     addFixedCostTemplate,
@@ -797,11 +968,11 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     removeMonthlyAccount,
   ]);
 
-  return useMemo(() => ({
+  return {
     variable: variableState,
     fixed: fixedState,
     statement: statementState,
-  }), [variableState, fixedState, statementState]);
+  };
 };
 
 export default useFinancialData;
