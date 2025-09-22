@@ -54,8 +54,12 @@ The application uses React Context + custom hooks pattern:
 
 ### Core Data Types
 - **Account** - Financial account with category (REVENUE, COGS, SGA_FIXED, SGA_VARIABLE)
+  - `isTemporary?: boolean` - Marks accounts added for specific months only
+  - `isArchived?: boolean` - Preserves deleted accounts with existing data
 - **Transaction** - Individual transaction records
-- **FixedCostLedgerItem** - Fixed cost tracking with asset vs operating service distinction
+- **FixedCostTemplate** - Fixed cost tracking with asset vs operating service distinction
+- **FixedCostActual** - Monthly fixed cost amounts and active status
+- **MonthlyAccountOverrides** - Month-specific account additions and modifications
 - **TransactionData & ManualData** - Monthly transaction and manual entry storage
 - **CalculatedMonthData** - Computed financial metrics per month
 
@@ -92,8 +96,11 @@ The application uses React Context + custom hooks pattern:
 ### Financial Data Management
 - Account categorization (Revenue, COGS, SGA Fixed/Variable)
 - Manual data entry and transaction-based tracking
-- Fixed cost ledger with asset finance vs operating service distinction
+- Fixed cost management with asset finance vs operating service distinction
 - Monthly data aggregation and calculations
+- **Monthly Account Overrides**: Add temporary accounts for specific months without affecting base structure
+- **Account Archiving**: Preserve data for deleted accounts while hiding them from active use
+- **Draft System**: Account Management page uses draft/save pattern for batch updates
 
 ### Multi-tenancy Architecture
 **Hospital Isolation**: Each hospital (tenant) has completely isolated financial data.
@@ -141,10 +148,25 @@ The application uses React Context + custom hooks pattern:
 
 ### State Update Patterns
 All financial data mutations flow through the `useFinancialData` hook methods:
-- Account management: `addAccount`, `removeAccount`, `updateAccount`
-- Transaction operations: `addTransaction`, `removeTransaction`, `updateTransaction`
-- Manual data: `updateManualAccountValue`
-- Fixed costs: `addFixedCostLedgerItem`, `updateFixedCostLedgerItem`, `removeFixedCostLedgerItem`
+
+**Base Account Management:**
+- `addAccount`, `removeAccount`, `updateAccount` - Core account structure
+- `saveStructure` - Batch save for Account Management page drafts
+
+**Monthly Account Overrides:**
+- `addMonthlyAccount`, `removeMonthlyAccount`, `updateMonthlyAccount` - Month-specific accounts
+
+**Transaction Operations:**
+- `addTransaction`, `removeTransaction`, `updateTransaction`
+- `setTransactionAccountTotal` - Set total for transaction-based accounts
+
+**Data Entry:**
+- `updateManualAccountValue` - Manual data entry
+- `upsertActual`, `removeActual` - Fixed cost monthly amounts
+
+**Fixed Cost Templates:**
+- `addTemplate`, `updateTemplate`, `removeTemplate` - Fixed cost template management
+- `createAccount` - Create SGA_FIXED accounts for templates
 
 ### Template System Implementation
 **DatabaseService Template Methods**:
@@ -170,3 +192,34 @@ The application supports Korean healthcare terminology and business practices:
 - Revenue split between 비급여 (non-insurance) and 보험 (insurance) services
 - Fixed costs include healthcare-specific items (의료장비, 4대보험료, etc.)
 - Multi-hospital management for healthcare chains or management companies
+
+## Important Implementation Notes
+
+### Monthly Account Override System
+**Purpose**: Allow month-specific account additions without modifying base account structure.
+
+**Key Implementation Details:**
+- `MonthlyAccountOverrides` stores temporary accounts per month
+- Temporary accounts marked with `isTemporary: true`
+- Base account deletions use archiving (`isArchived: true`) to preserve historical data
+- `accountValues` calculation considers both base and temporary accounts
+- UI shows "+ 해당 월 전용 항목 추가" button in Income Statement tables
+
+### Account Management Draft System
+**Purpose**: Prevent accidental changes by requiring explicit save action.
+
+**Implementation:**
+- `AccountManagementPage` maintains separate draft state
+- `isDirty` flag tracks unsaved changes
+- `saveStructure()` applies all changes atomically
+- Archived accounts (`isArchived: true`) are filtered from active display
+
+### Fixed Cost Template System
+**Architecture**: Templates define the structure, Actuals store monthly values.
+
+**Key Points:**
+- `FixedCostTemplate` - Defines service details and default amounts
+- `FixedCostActual` - Monthly amounts and active/inactive status
+- Templates linked to SGA_FIXED accounts via `accountId`
+- UI provides asset finance vs operating service categorization
+- Payment date selection with day-of-month picker interface
