@@ -318,7 +318,7 @@ const FixedCostItemModal: React.FC<{
 };
 
 const FixedCostsPage: React.FC = () => {
-  const { fixed, currentMonths, setCurrentMonths } = useFinancials();
+  const { fixed, currentMonths, setCurrentMonths, commitDraft, hasUnsavedChanges } = useFinancials();
   const [activeTab, setActiveTab] = useState<FixedCostType>('ASSET_FINANCE');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FixedCostTemplate | null>(null);
@@ -454,12 +454,22 @@ const FixedCostsPage: React.FC = () => {
         title="고정비 및 계약 관리"
         description="리스, 금융 자산 및 운영 서비스 계약 정보를 관리합니다."
         actions={(
-          <button
-            onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
-            className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700"
-          >
-            + 고정비 항목 추가
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={commitDraft}
+              disabled={!hasUnsavedChanges}
+              className={`px-4 py-2 rounded-md text-sm font-semibold ${hasUnsavedChanges ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+            >
+              변경사항 저장
+            </button>
+            <button
+              onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-semibold rounded-md hover:bg-gray-100"
+            >
+              + 고정비 항목 추가
+            </button>
+          </div>
         )}
         showMonthSelector
         currentMonths={currentMonths}

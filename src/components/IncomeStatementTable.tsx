@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { formatCurrency, formatMonth } from '../utils/formatters';
 import { Account, AccountCategory, CostBehavior } from '../types';
 import TransactionDetailModal from './TransactionDetailModal';
@@ -8,6 +8,7 @@ import ConfirmationModal from './common/ConfirmationModal';
 
 interface IncomeStatementTableProps {
   months: [string, string | null];
+  primaryMonth?: string | null;
   display: 'revenue' | 'expense';
   filterGroup?: string;
   costBehaviorFilter?: CostBehavior;
@@ -27,6 +28,7 @@ interface StatementAccountRowProps {
   onShowDetails?: (month: string, accountId: string, accountName: string) => void;
   onRemoveTemporary?: () => void;
   onRenameTemporary?: (nextName: string) => void;
+  editableMonth: string | null;
 }
 
 const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
@@ -38,6 +40,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
   onShowDetails,
   onRemoveTemporary,
   onRenameTemporary,
+  editableMonth,
 }) => {
   const { account, availability } = row;
   const isTransactionAccount = account.entryType === 'transaction';
@@ -46,6 +49,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
   const [draftName, setDraftName] = useState(account.name);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const canRename = Boolean(onRenameTemporary && editableMonth && availability.has(editableMonth));
 
   React.useEffect(() => {
     setDraftName(account.name);
@@ -59,7 +63,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
 
   const handleNameCommit = () => {
     const trimmed = draftName.trim();
-    if (!trimmed || trimmed === account.name) {
+    if (!trimmed || trimmed === account.name || !canRename) {
       setDraftName(account.name);
     } else if (onRenameTemporary) {
       onRenameTemporary(trimmed);
@@ -74,7 +78,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
           <div className="flex items-center gap-2">
             {onRenameTemporary ? (
               <>
-                {isEditingName ? (
+                {canRename && isEditingName ? (
                   <input
                     ref={nameInputRef}
                     type="text"
@@ -87,22 +91,23 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
                 ) : (
                   <span>{account.name}</span>
                 )}
-                <div className="flex items-center gap-1">
-                  <EditIcon onClick={() => setIsEditingName(true)} className="text-gray-400 hover:text-blue-500" />
-                  <button
-                    type="button"
-                    onClick={() => setIsConfirmingDelete(true)}
-                    className="text-gray-400 hover:text-red-500"
-                    aria-label={`${account.name} 삭제`}
-                  >
-                    &times;
-                  </button>
-                </div>
+                {canRename && (
+                  <div className="flex items-center gap-1">
+                    <EditIcon onClick={() => setIsEditingName(true)} className="text-gray-400 hover:text-blue-500" />
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingDelete(true)}
+                      className="text-gray-400 hover:text-red-500"
+                      aria-label={`${account.name} 삭제`}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex items-center gap-2">
                 <span>{account.name}</span>
-                
               </div>
             )}
           </div>
@@ -117,6 +122,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
           }
 
           const value = values[month] ?? 0;
+          const canEditMonth = editableMonth === month;
 
           return (
             <td key={month} className="py-3 px-4 text-base text-right">
@@ -125,15 +131,16 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
                   <input
                     type="text"
                     value={formatCurrency(value)}
-                    onChange={(e) => onValueChange(month, e.target.value)}
-                    className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${isNegative ? 'text-red-600' : ''}`}
+                    onChange={(e) => canEditMonth && onValueChange(month, e.target.value)}
+                    disabled={!canEditMonth}
+                    className={`w-full text-right bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1 ${isNegative ? 'text-red-600' : ''} ${canEditMonth ? '' : 'cursor-not-allowed text-gray-500'}`}
                   />
                 ) : (
                   <span className={`min-w-[6rem] text-right ${isNegative ? 'text-red-600' : ''}`}>
                     {formatCurrency(value)}
                   </span>
                 )}
-                {onShowDetails && isTransactionAccount && !isFixedExpense && (
+                {onShowDetails && isTransactionAccount && !isFixedExpense && canEditMonth && (
                   <button
                     type="button"
                     onClick={() => onShowDetails(month, account.id, account.name)}
@@ -147,7 +154,7 @@ const StatementAccountRow: React.FC<StatementAccountRowProps> = ({
           );
         })}
       </tr>
-      {isConfirmingDelete && onRemoveTemporary && (
+      {isConfirmingDelete && onRemoveTemporary && canRename && (
         <ConfirmationModal
           isOpen={isConfirmingDelete}
           title="임시 계정 삭제 확인"
@@ -184,7 +191,7 @@ const MonthlyAccountAdder: React.FC<{
     setIsEditing(false);
   };
 
-  if (disabled || months.length === 0) {
+  if (disabled || months.length === 0 || !targetMonth) {
     return null;
   }
 
@@ -220,12 +227,18 @@ const MonthlyAccountAdder: React.FC<{
   );
 };
 
-const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, display, filterGroup, costBehaviorFilter }) => {
+const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, primaryMonth, display, filterGroup, costBehaviorFilter }) => {
   const { variable, statement } = useFinancials();
   const { updateManualAccountValue, setTransactionAccountTotal, manualData, transactionData } = variable;
   const { monthlyOverrides, addMonthlyAccount, updateMonthlyAccount, removeMonthlyAccount, accountValues, accounts: statementAccounts } = statement;
 
   const validMonths = useMemo(() => months.filter(Boolean) as string[], [months]);
+  const editableMonth = useMemo(() => {
+    if (primaryMonth) {
+      return primaryMonth;
+    }
+    return validMonths[0] ?? null;
+  }, [primaryMonth, validMonths]);
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -375,13 +388,14 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
                 onShowDetails={row.account.entryType === 'transaction' ? showDetails : undefined}
                 onRemoveTemporary={row.account.isTemporary && originMonth ? () => removeMonthlyAccount(originMonth, row.account.id) : undefined}
                 onRenameTemporary={row.account.isTemporary && originMonth ? (nextName) => updateMonthlyAccount(originMonth, row.account.id, { name: nextName }) : undefined}
+                editableMonth={editableMonth}
               />
             );
           })}
           <MonthlyAccountAdder
             months={validMonths}
             onAdd={(month, name) => handleAddTemporaryAccount(groupName, month, name, groupConfig.category)}
-            disabled={disableAdder}
+            disabled={disableAdder || !editableMonth}
           />
         </tbody>
         <tfoot className="border-t-2 border-slate-300">
@@ -418,8 +432,3 @@ const IncomeStatementTable: React.FC<IncomeStatementTableProps> = ({ months, dis
 };
 
 export default IncomeStatementTable;
-
-
-
-
-

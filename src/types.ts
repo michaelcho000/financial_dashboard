@@ -165,6 +165,12 @@ export interface UseFinancialDataReturn {
   variable: VariableAccountsState;
   fixed: FixedCostsState;
   statement: IncomeStatementState;
+  hasUnsavedChanges: boolean;
+  commitDraft: () => void;
+  resetDraft: () => void;
+  monthMetadata: Array<{ month: string; hasCommittedData: boolean; hasDraftData: boolean }>;
+  prepareMonth: (month: string, options: { mode: 'copyPrevious' | 'blank'; sourceMonth?: string; force?: boolean }) => boolean;
+  getDefaultSourceMonth: (targetMonth?: string) => string | null;
 }
 
 

@@ -9,17 +9,37 @@ interface HeaderProps {
     actions?: React.ReactNode;
     currentMonths: [string, string | null];
     setCurrentMonths: React.Dispatch<React.SetStateAction<[string, string | null]>>;
+    onStartMonthChange?: (nextMonth: string) => boolean | void;
+    onEndMonthChange?: (nextMonth: string | null) => boolean | void;
 }
 
-const Header: React.FC<HeaderProps> = ({ title, description, showMonthSelector = false, actions, currentMonths, setCurrentMonths }) => {
+const Header: React.FC<HeaderProps> = ({
+    title,
+    description,
+    showMonthSelector = false,
+    actions,
+    currentMonths,
+    setCurrentMonths,
+    onStartMonthChange,
+    onEndMonthChange,
+}) => {
     const [startMonth, endMonth] = currentMonths;
 
     const handleStartMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setCurrentMonths([e.target.value, endMonth]);
+        const nextValue = e.target.value;
+        const allowUpdate = onStartMonthChange ? onStartMonthChange(nextValue) : true;
+        if (allowUpdate !== false) {
+            setCurrentMonths([nextValue, endMonth]);
+        }
     };
 
     const handleEndMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setCurrentMonths([startMonth, e.target.value]);
+        const nextValue = e.target.value;
+        const normalized = nextValue ? nextValue : null;
+        const allowUpdate = onEndMonthChange ? onEndMonthChange(normalized) : true;
+        if (allowUpdate !== false) {
+            setCurrentMonths([startMonth, normalized]);
+        }
     };
 
     const showComparison = () => {
@@ -28,11 +48,18 @@ const Header: React.FC<HeaderProps> = ({ title, description, showMonthSelector =
         const prevDate = new Date(year, month - 2, 1);
         const prevYear = prevDate.getFullYear();
         const prevMonth = (prevDate.getMonth() + 1).toString().padStart(2, '0');
-        setCurrentMonths([startMonth, `${prevYear}-${prevMonth}`]);
+        const nextEnd = `${prevYear}-${prevMonth}`;
+        const allowUpdate = onEndMonthChange ? onEndMonthChange(nextEnd) : true;
+        if (allowUpdate !== false) {
+            setCurrentMonths([startMonth, nextEnd]);
+        }
     };
 
     const hideComparison = () => {
-        setCurrentMonths([startMonth, null]);
+        const allowUpdate = onEndMonthChange ? onEndMonthChange(null) : true;
+        if (allowUpdate !== false) {
+            setCurrentMonths([startMonth, null]);
+        }
     };
     
     return (
