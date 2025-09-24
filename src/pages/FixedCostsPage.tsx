@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { FixedCostActual, FixedCostTemplate, FixedCostType } from '../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FixedCostActualSnapshot, FixedCostTemplate, FixedCostType } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import NotificationModal from '../components/common/NotificationModal';
 import useSaveNotification from '../hooks/useSaveNotification';
@@ -35,6 +35,18 @@ const formatPaymentDateLabel = (value?: string): string => {
     return `${parseInt(match[1], 10)}일`;
   }
   return value;
+};
+
+const formatMonthLabel = (value: string): string => {
+  const [year, month] = value.split('-');
+  if (!year || !month) {
+    return value;
+  }
+  const numericMonth = Number(month);
+  if (Number.isNaN(numericMonth)) {
+    return value;
+  }
+  return `${year}년 ${numericMonth}월`;
 };
 
 type FixedCostModalPayload = {
@@ -320,25 +332,110 @@ const FixedCostItemModal: React.FC<{
 };
 
 const FixedCostsPage: React.FC = () => {
-  const { fixed, currentMonths, setCurrentMonths, commitDraft, resetDraft, unsaved, versions } = useFinancials();
-  const { notifySave, notifyCancel, notificationProps } = useSaveNotification();
+  const { fixed, currentMonths, setCurrentMonths, commitDraft, resetDraft, unsaved, versions, monthMetadata } = useFinancials();
+  const { notifySave, notifyCancel, notifyCustom, notificationProps } = useSaveNotification();
   const [activeTab, setActiveTab] = useState<FixedCostType>('ASSET_FINANCE');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FixedCostTemplate | null>(null);
   const [deletionTarget, setDeletionTarget] = useState<FixedCostTemplate | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const [lastBulkAction, setLastBulkAction] = useState<string | null>(null);
 
   const currentMonth = currentMonths[0];
 
-  const actualByTemplate = useMemo(() => {
-    const map: Record<string, FixedCostActual> = {};
-    fixed.actuals
-      .filter(actual => actual.month === currentMonth)
-      .forEach(actual => {
-        map[actual.templateId] = actual;
+  const actualByTemplate = useMemo<Record<string, FixedCostActualSnapshot>>(() => {
+    if (!currentMonth) {
+      return {};
+    }
+    return fixed.actualMap[currentMonth] ?? {};
+  }, [fixed.actualMap, currentMonth]);
+
+  const previousMonthWithData = useMemo(() => {
+    if (!currentMonth) {
+      return null;
+    }
+    const candidates = monthMetadata
+      .filter(meta => meta.month < currentMonth && (meta.hasDraftData || meta.hasCommittedData))
+      .map(meta => meta.month)
+      .sort();
+    if (candidates.length === 0) {
+      return null;
+    }
+    return candidates[candidates.length - 1];
+  }, [currentMonth, monthMetadata]);
+
+  const disableBulkActions = !currentMonth;
+
+  const clearAmountDrafts = useCallback(() => {
+    setAmountDrafts({});
+  }, []);
+
+  const handleApplyTemplateDefaults = () => {
+    if (!currentMonth) {
+      return;
+    }
+    fixed.templates.forEach(template => {
+      const current = actualByTemplate[template.id];
+      const nextIsActive = template.monthlyCost > 0 ? true : (current?.isActive ?? false);
+      fixed.upsertActual(currentMonth, template.id, {
+        amount: template.monthlyCost,
+        isActive: nextIsActive,
       });
-    return map;
-  }, [fixed.actuals, currentMonth]);
+    });
+    clearAmountDrafts();
+    setLastBulkAction('템플릿 기본 금액을 적용했습니다.');
+    notifyCustom('기본 월 금액 적용', '템플릿 기본 금액을 현재 월 초안에 반영했습니다. 변경사항 저장을 완료하면 손익에 반영됩니다.');
+  };
+
+  const handleApplyPreviousMonth = () => {
+    if (!currentMonth) {
+      return;
+    }
+    if (!previousMonthWithData) {
+      setLastBulkAction('이전 월에 복사할 고정비 데이터가 없습니다.');
+      notifyCustom('이전 월 데이터 없음', '이전 월에 저장된 고정비 데이터가 없어 복사할 수 없습니다.');
+      return;
+    }
+    const sourceActuals = fixed.actualMap[previousMonthWithData] ?? {};
+    fixed.templates.forEach(template => {
+      const source = sourceActuals[template.id];
+      fixed.upsertActual(currentMonth, template.id, {
+        amount: source ? source.amount : 0,
+        isActive: source ? source.isActive : false,
+      });
+    });
+    clearAmountDrafts();
+    setLastBulkAction(`${formatMonthLabel(previousMonthWithData)} 데이터를 복사했습니다.`);
+    notifyCustom('이전 월 금액 적용', `${formatMonthLabel(previousMonthWithData)} 데이터를 현재 월에 복사했습니다. 변경사항 저장을 완료하면 손익에 반영됩니다.`);
+  };
+
+  const handleResetCurrentMonth = () => {
+    if (!currentMonth) {
+      return;
+    }
+    fixed.templates.forEach(template => {
+      fixed.upsertActual(currentMonth, template.id, { amount: 0, isActive: false });
+    });
+    clearAmountDrafts();
+    setLastBulkAction('현재 월 고정비 금액을 초기화했습니다.');
+    notifyCustom('기본 월 금액 초기화', '현재 월의 고정비 금액을 0으로 초기화했습니다. 저장을 완료하면 보고서에서도 반영이 사라집니다.');
+  };
+
+  const handleToggleAllActive = (nextActive: boolean) => {
+    if (!currentMonth) {
+      return;
+    }
+    fixed.templates.forEach(template => {
+      fixed.upsertActual(currentMonth, template.id, { isActive: nextActive });
+    });
+    if (nextActive) {
+      setLastBulkAction('모든 고정비 항목을 월반영으로 전환했습니다.');
+      notifyCustom('월반영 전체 ON', '현재 월의 모든 고정비 항목을 월반영으로 전환했습니다. 저장을 완료하면 손익에 반영됩니다.');
+    } else {
+      setLastBulkAction('모든 고정비 항목을 월반영 해제했습니다.');
+      notifyCustom('월반영 전체 OFF', '현재 월의 모든 고정비 항목이 손익 계산과 상세 목록에서 숨겨집니다. 저장을 완료하면 반영됩니다.');
+    }
+  };
 
   const filteredTemplates = useMemo(
     () => fixed.templates.filter(item => item.costType === activeTab),
@@ -350,7 +447,8 @@ const FixedCostsPage: React.FC = () => {
       return;
     }
     commitDraft();
-    setAmountDrafts({});
+    clearAmountDrafts();
+    setLastBulkAction('변경사항을 저장했습니다.');
     notifySave('고정비 데이터를 저장했습니다.');
   };
 
@@ -359,13 +457,18 @@ const FixedCostsPage: React.FC = () => {
       return;
     }
     resetDraft();
-    setAmountDrafts({});
+    clearAmountDrafts();
+    setLastBulkAction('변경사항을 취소했습니다.');
     notifyCancel('고정비 변경사항을 취소했습니다.');
   };
 
   useEffect(() => {
-    setAmountDrafts({});
-  }, [versions.draft]);
+    clearAmountDrafts();
+  }, [versions.draft, clearAmountDrafts]);
+
+  useEffect(() => {
+    setLastBulkAction(null);
+  }, [currentMonth]);
 
   const handleSaveTemplate = (payload: FixedCostModalPayload) => {
     const groupLabel = COST_TYPE_GROUP_LABEL[payload.costType];
@@ -424,6 +527,7 @@ const FixedCostsPage: React.FC = () => {
   const handleAmountChange = (templateId: string, value: string) => {
     const numericString = value.replace(/[^0-9]/g, '');
     setAmountDrafts(prev => ({ ...prev, [templateId]: numericString }));
+    setLastBulkAction('고정비 금액을 직접 수정했습니다.');
   };
 
   const commitAmount = (template: FixedCostTemplate) => {
@@ -452,6 +556,17 @@ const FixedCostsPage: React.FC = () => {
   const handleToggleActive = (template: FixedCostTemplate, nextActive: boolean) => {
     if (!currentMonth) return;
     fixed.upsertActual(currentMonth, template.id, { isActive: nextActive });
+    setLastBulkAction(
+      nextActive
+        ? `"${template.serviceName}" 항목을 월반영으로 전환했습니다.`
+        : `"${template.serviceName}" 항목을 월반영에서 제외했습니다.`,
+    );
+    if (!nextActive) {
+      notifyCustom(
+        '월반영 해제',
+        `"${template.serviceName}" 항목은 이 월의 손익 계산과 상세 목록에서 숨겨집니다. 다시 표시하려면 월반영을 켜주세요.`,
+      );
+    }
   };
 
   const getRemainingMonths = (endDate: string) => {
@@ -478,6 +593,7 @@ const FixedCostsPage: React.FC = () => {
       <Header
         title="고정비 및 계약 관리"
         description="리스, 금융 자산 및 운영 서비스 계약 정보를 관리합니다."
+        allowComparisonToggle={false}
         actions={(
           <div className="flex items-center gap-3">
             <button
@@ -510,7 +626,52 @@ const FixedCostsPage: React.FC = () => {
         setCurrentMonths={setCurrentMonths}
       />
 
-      <div className="mt-6 border-b border-gray-200">
+      <div className="mt-6 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleApplyTemplateDefaults}
+            disabled={disableBulkActions}
+            className={`px-4 py-2 rounded-md text-sm font-semibold ${disableBulkActions ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+          >
+            기본 월 금액 적용
+          </button>
+          <button
+            type="button"
+            onClick={handleApplyPreviousMonth}
+            disabled={disableBulkActions}
+            className={`px-4 py-2 rounded-md text-sm font-semibold ${disableBulkActions ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+          >
+            이전 월 금액 복사
+          </button>
+          <button
+            type="button"
+            onClick={handleResetCurrentMonth}
+            disabled={disableBulkActions}
+            className={`px-4 py-2 rounded-md text-sm font-semibold ${disableBulkActions ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+          >
+            기본 월 금액 초기화
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleAllActive(true)}
+            disabled={disableBulkActions}
+            className={`px-4 py-2 rounded-md text-sm font-semibold ${disableBulkActions ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+          >
+            월반영 전체 ON
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleAllActive(false)}
+            disabled={disableBulkActions}
+            className={`px-4 py-2 rounded-md text-sm font-semibold ${disableBulkActions ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+          >
+            월반영 전체 OFF
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between">
         <nav className="-mb-px flex space-x-6" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('ASSET_FINANCE')}
@@ -525,6 +686,9 @@ const FixedCostsPage: React.FC = () => {
             운영 서비스 계약
           </button>
         </nav>
+        {lastBulkAction && (
+          <p className="text-sm text-gray-600 text-right md:min-w-[200px]">{lastBulkAction}</p>
+        )}
       </div>
 
       <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

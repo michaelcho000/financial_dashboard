@@ -133,15 +133,15 @@ const Sidebar: React.FC = () => {
             </ul>
           </nav>
 
-          <div className="mt-6 px-3">
-            <button
-              type="button"
-              onClick={() => setIsMonthModalOpen(true)}
-              className="w-full px-3 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
-            >
-              월 데이터 관리
-            </button>
-          </div>
+        <div className="mt-6 px-3">
+          <button
+            type="button"
+            onClick={() => setIsMonthModalOpen(true)}
+            className="w-full px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+          >
+            월 데이터 관리
+          </button>
+        </div>
         </div>
 
         <div className="mt-6 p-3 border-t border-gray-200 text-sm text-gray-700 space-y-2">

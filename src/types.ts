@@ -48,6 +48,20 @@ export interface FixedCostActual {
   isActive: boolean;
 }
 
+export interface FixedCostActualSnapshot {
+  id: string;
+  templateId: string;
+  accountId: string;
+  amount: number;
+  isActive: boolean;
+}
+
+export type FixedCostActualMap = {
+  [month: string]: {
+    [templateId: string]: FixedCostActualSnapshot;
+  };
+};
+
 export interface TransactionData {
   [month: string]: {
     [accountId: string]: Transaction[];
@@ -130,6 +144,8 @@ export interface FixedCostsState {
   accounts: Account[];
   templates: FixedCostTemplate[];
   actuals: FixedCostActual[];
+  actualMap: FixedCostActualMap;
+  activeAccountIdsByMonth: { [month: string]: string[] };
   addTemplate: (item: Omit<FixedCostTemplate, 'id'>) => string;
   updateTemplate: (itemId: string, updates: Partial<FixedCostTemplate>) => void;
   removeTemplate: (itemId: string) => void;

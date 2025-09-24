@@ -7,6 +7,7 @@ import {
   CostBehavior,
   Financials,
   FixedCostActual,
+  FixedCostActualMap,
   FixedCostTemplate,
   FixedCostType,
   IncomeStatementState,
@@ -459,19 +460,63 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     return Array.from(months).sort();
   }, [transactionData, manualData, fixedCostActuals, monthlyOverrides]);
 
-  const fixedCostValueByMonth = useMemo(() => {
-    const map: { [month: string]: { [accountId: string]: number } } = {};
-    fixedCostActuals.forEach(actual => {
-      if (!actual.isActive) return;
-      const template = fixedCostTemplates.find(t => t.id === actual.templateId);
-      if (!template) return;
-      if (!map[actual.month]) {
-        map[actual.month] = {};
-      }
-      map[actual.month][template.accountId] = (map[actual.month][template.accountId] || 0) + actual.amount;
+  const templateById = useMemo(() => {
+    const map: Record<string, FixedCostTemplate> = {};
+    fixedCostTemplates.forEach(template => {
+      map[template.id] = template;
     });
     return map;
-  }, [fixedCostActuals, fixedCostTemplates]);
+  }, [fixedCostTemplates]);
+
+  const fixedCostActualMap = useMemo<FixedCostActualMap>(() => {
+    const ledger: FixedCostActualMap = {};
+    fixedCostActuals.forEach(actual => {
+      const template = templateById[actual.templateId];
+      if (!template) {
+        return;
+      }
+      if (!ledger[actual.month]) {
+        ledger[actual.month] = {};
+      }
+      ledger[actual.month][actual.templateId] = {
+        id: actual.id,
+        templateId: actual.templateId,
+        accountId: template.accountId,
+        amount: actual.amount,
+        isActive: actual.isActive,
+      };
+    });
+    return ledger;
+  }, [fixedCostActuals, templateById]);
+
+  const fixedCostValueByMonth = useMemo(() => {
+    const map: { [month: string]: { [accountId: string]: number } } = {};
+    Object.entries(fixedCostActualMap).forEach(([month, templateMap]) => {
+      const accountTotals: { [accountId: string]: number } = {};
+      Object.values(templateMap).forEach(entry => {
+        if (!entry.isActive) {
+          return;
+        }
+        accountTotals[entry.accountId] = (accountTotals[entry.accountId] || 0) + entry.amount;
+      });
+      map[month] = accountTotals;
+    });
+    return map;
+  }, [fixedCostActualMap]);
+
+  const activeFixedAccountIdsByMonth = useMemo(() => {
+    const map: { [month: string]: string[] } = {};
+    Object.entries(fixedCostActualMap).forEach(([month, templateMap]) => {
+      const accountIds = new Set<string>();
+      Object.values(templateMap).forEach(entry => {
+        if (entry.isActive) {
+          accountIds.add(entry.accountId);
+        }
+      });
+      map[month] = Array.from(accountIds);
+    });
+    return map;
+  }, [fixedCostActualMap]);
 
   const accountValues = useMemo(() => {
     const result: { [month: string]: { [accountId: string]: number } } = {};
@@ -1316,6 +1361,8 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     accounts: fixedExpenseAccounts,
     templates: fixedCostTemplates,
     actuals: fixedCostActuals,
+    actualMap: fixedCostActualMap,
+    activeAccountIdsByMonth: activeFixedAccountIdsByMonth,
     addTemplate: addFixedCostTemplate,
     updateTemplate: updateFixedCostTemplate,
     removeTemplate: removeFixedCostTemplate,
@@ -1327,6 +1374,8 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     fixedExpenseAccounts,
     fixedCostTemplates,
     fixedCostActuals,
+    fixedCostActualMap,
+    activeFixedAccountIdsByMonth,
     addFixedCostTemplate,
     updateFixedCostTemplate,
     removeFixedCostTemplate,

@@ -7,6 +7,7 @@ import useSaveNotification from '../hooks/useSaveNotification';
 import { isMonthWithinYearRange } from '../utils/dateHelpers';
 import { AccountRow } from '../components/tables/AccountRow';
 import { useFinancials } from '../contexts/FinancialDataContext';
+import { Account } from '../types';
 
 const SectionCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -77,10 +78,41 @@ const FixedCostsSummary: React.FC<{ months: [string, string | null] }> = ({ mont
   const { accounts: fixedAccounts } = fixed;
   const validMonths = months.filter(Boolean) as string[];
 
+  const accountMap = useMemo(() => {
+    const map = new Map<string, Account>();
+    fixedAccounts.forEach(account => {
+      map.set(account.id, account);
+    });
+    return map;
+  }, [fixedAccounts]);
+
+  const activeAccountIds = useMemo(() => {
+    const ids = new Set<string>();
+    validMonths.forEach(month => {
+      (fixed.activeAccountIdsByMonth[month] ?? []).forEach(id => ids.add(id));
+    });
+    return Array.from(ids);
+  }, [fixed.activeAccountIdsByMonth, validMonths]);
+
+  const accountsToRender = useMemo(
+    () => activeAccountIds.map(id => accountMap.get(id)).filter((account): account is Account => Boolean(account)),
+    [activeAccountIds, accountMap],
+  );
+
   if (fixedAccounts.length === 0) {
     return (
       <SectionCard title="고정비 상세">
         <div className="p-4 text-sm text-gray-500">등록된 고정비 계정이 없습니다.</div>
+      </SectionCard>
+    );
+  }
+
+  if (accountsToRender.length === 0) {
+    return (
+      <SectionCard title="고정비 상세">
+        <div className="p-4 text-sm text-gray-500">
+          선택한 월에 월반영된 고정비 항목이 없습니다. 고정비 페이지에서 월반영을 켜면 이곳에 표시됩니다.
+        </div>
       </SectionCard>
     );
   }
@@ -100,7 +132,7 @@ const FixedCostsSummary: React.FC<{ months: [string, string | null] }> = ({ mont
             </tr>
           </thead>
           <tbody>
-            {fixedAccounts.map(account => (
+            {accountsToRender.map(account => (
               <AccountRow
                 key={account.id}
                 account={account}
