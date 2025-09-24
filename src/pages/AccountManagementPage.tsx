@@ -130,7 +130,7 @@ const GroupEditor: React.FC<GroupEditorProps> = ({
           />
         ))}
       </div>
-      <div className="px-3 pb-3">
+      <div className="flex items-center justify-between p-2 pl-8 border-t border-gray-200 hover:bg-gray-50">
         {isAddingAccount ? (
           <input
             type="text"
@@ -140,10 +140,14 @@ const GroupEditor: React.FC<GroupEditorProps> = ({
             autoFocus
             onBlur={handleAddAccount}
             onKeyDown={e => e.key === 'Enter' && handleAddAccount()}
-            className="text-base border-b-2 border-blue-400 focus:outline-none bg-transparent"
+            className="flex-1 text-base bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm px-1"
           />
         ) : (
-          <button onClick={() => setIsAddingAccount(true)} className="text-base text-blue-600 hover:text-blue-800">
+          <button
+            type="button"
+            onClick={() => setIsAddingAccount(true)}
+            className="w-full text-left text-base text-blue-600 hover:text-blue-800"
+          >
             + 계정 추가
           </button>
         )}

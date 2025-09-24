@@ -482,17 +482,18 @@ const FixedCostsPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
+              className="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+            >
+              + 고정비 항목 추가
+            </button>
+            <button
+              type="button"
               onClick={handleCancelChanges}
               disabled={!unsaved.fixed}
               className={`px-4 py-2 rounded-md text-sm font-semibold ${unsaved.fixed ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
             >
               변경 취소
-            </button>
-            <button
-              onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-semibold rounded-md hover:bg-gray-100"
-            >
-              + 고정비 항목 추가
             </button>
             <button
               type="button"
