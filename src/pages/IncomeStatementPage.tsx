@@ -296,7 +296,7 @@ const IncomeStatementPage: React.FC = () => {
 
       {showMissingNotice && primaryMonth && (
         <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
-          {formatMonthLabel(primaryMonth)} 데이터가 아직 저장되지 않았습니다. 사이드바의 ‘월 데이터 관리’에서 새 월을 생성하거나 직전 달을 복사해 시작하세요.
+          {formatMonthLabel(primaryMonth)}의 데이터가 빈 값이거나 저장되지 않았습니다. 작성 후 변경사항을 저장하세요.
         </div>
       )}
 
