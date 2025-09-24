@@ -11,12 +11,17 @@ import {
   FixedCostType,
   IncomeStatementState,
   MonthlyAccountOverrides,
+  MonthMetadataMap,
+  MonthOverview,
+  MonthSourceType,
   Transaction,
   UseFinancialDataReturn,
   VariableAccountsState,
   FixedCostsState,
+  YearConfiguration,
 } from '../types';
 import DatabaseService from '../services/DatabaseService';
+import { buildAllowedYearSequence, getClientCurrentYear, isMonthWithinYearRange } from '../utils/dateHelpers';
 
 const LEGACY_COST_BEHAVIOR_MAP: Record<string, CostBehavior> = {
   COGS: 'variable',
@@ -29,8 +34,8 @@ const LEGACY_EXPENSE_CATEGORIES = new Set(Object.keys(LEGACY_COST_BEHAVIOR_MAP))
 const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const COST_TYPE_GROUP: Record<FixedCostType, string> = {
-  ASSET_FINANCE: '리스/금융 자산',
-  OPERATING_SERVICE: '운영 서비스 계약',
+  ASSET_FINANCE: '由ъ뒪/湲덉쑖 ?먯궛',
+  OPERATING_SERVICE: '?댁쁺 ?쒕퉬??怨꾩빟',
 };
 
 const normalizeAccount = (raw: any): Account => {
@@ -64,7 +69,7 @@ const normalizeAccount = (raw: any): Account => {
 
   return {
     id: String(raw.id ?? createId('acct')),
-    name: String(raw.name ?? '미정'),
+    name: String(raw.name ?? '誘몄젙'),
     category,
     costBehavior,
     group: raw.group ?? undefined,
@@ -78,6 +83,75 @@ const normalizeAccount = (raw: any): Account => {
 const normalizeAccountArray = (items: any[] | undefined): Account[] => (
   Array.isArray(items) ? items.map(normalizeAccount) : []
 );
+
+const isObject = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null
+);
+
+const deepEqual = (left: unknown, right: unknown): boolean => {
+  if (left === right) {
+    return true;
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    for (let index = 0; index < left.length; index += 1) {
+      if (!deepEqual(left[index], right[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (isObject(left) || isObject(right)) {
+    if (!isObject(left) || !isObject(right)) {
+      return false;
+    }
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    for (const key of leftKeys) {
+      if (!rightKeys.includes(key)) {
+        return false;
+      }
+      if (!deepEqual(left[key], right[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return left === right;
+};
+
+const extractStructureSlice = (financials: Financials | null) => {
+  if (!financials) return null;
+  return {
+    accounts: financials.accounts,
+    accountGroups: financials.accountGroups,
+  };
+};
+
+const extractFixedSlice = (financials: Financials | null) => {
+  if (!financials) return null;
+  return {
+    templates: financials.fixedCostTemplates,
+    actuals: financials.fixedCostActuals,
+  };
+};
+
+const extractStatementSlice = (financials: Financials | null) => {
+  if (!financials) return null;
+  return {
+    transactionData: financials.transactionData,
+    manualData: financials.manualData,
+    monthlyOverrides: financials.monthlyOverrides ?? {},
+  };
+};
 
 const mergeUniqueStrings = (...arrays: (string[] | undefined)[]): string[] => {
   const set = new Set<string>();
@@ -106,6 +180,28 @@ const normalizeMonthlyOverrides = (overrides: MonthlyAccountOverrides | undefine
   return normalized;
 };
 
+const normalizeMonthMeta = (input: any): MonthMetadataMap => {
+  if (!input || typeof input !== 'object') {
+    return {};
+  }
+
+  const normalized: MonthMetadataMap = {};
+  Object.entries(input as Record<string, any>).forEach(([month, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const sourceType = value.sourceType === 'copy' ? 'copy' : 'template';
+    normalized[month] = {
+      createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString(),
+      sourceType,
+      sourceMonth: typeof value.sourceMonth === 'string' ? value.sourceMonth : undefined,
+      savedAt: typeof value.savedAt === 'string' ? value.savedAt : undefined,
+    };
+  });
+
+  return normalized;
+};
+
 const normalizeFinancials = (raw: any): Financials => {
   if (!raw) {
     return {
@@ -123,6 +219,7 @@ const normalizeFinancials = (raw: any): Financials => {
       fixedCostTemplates: [],
       fixedCostActuals: [],
       monthlyOverrides: {},
+      monthMeta: {},
     };
   }
 
@@ -165,6 +262,7 @@ const normalizeFinancials = (raw: any): Financials => {
     fixedCostTemplates: raw.fixedCostTemplates ?? [],
     fixedCostActuals: raw.fixedCostActuals ?? [],
     monthlyOverrides: normalizeMonthlyOverrides(raw.monthlyOverrides),
+    monthMeta: normalizeMonthMeta(raw.monthMeta),
   };
 };
 
@@ -183,6 +281,7 @@ const EMPTY_FINANCIALS: Financials = {
   fixedCostTemplates: [],
   fixedCostActuals: [],
   monthlyOverrides: {},
+  monthMeta: {},
 };
 
 const cloneFinancials = (data: Financials): Financials => JSON.parse(JSON.stringify(data));
@@ -214,25 +313,57 @@ const collectMonths = (financials: Financials | null): string[] => {
   Object.keys(financials.manualData || {}).forEach(month => set.add(month));
   Object.keys(financials.monthlyOverrides || {}).forEach(month => set.add(month));
   financials.fixedCostActuals?.forEach(actual => set.add(actual.month));
+  Object.keys(financials.monthMeta || {}).forEach(month => set.add(month));
   return Array.from(set);
 };
 
 const sortMonths = (months: string[]): string[] => [...months].sort();
 
+const findLatestSavedAt = (financials: Financials | null): string | null => {
+  if (!financials?.monthMeta) {
+    return null;
+  }
+  let latest: string | null = null;
+  Object.values(financials.monthMeta).forEach(meta => {
+    if (!meta?.savedAt) {
+      return;
+    }
+    if (!latest || meta.savedAt > latest) {
+      latest = meta.savedAt;
+    }
+  });
+  return latest;
+};
+
 const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn | null => {
+  const currentYear = useMemo(() => getClientCurrentYear(), []);
+  const allowedYears = useMemo(() => buildAllowedYearSequence(currentYear, 1, 1), [currentYear]);
+  const minAllowedYear = allowedYears[0];
+  const maxAllowedYear = allowedYears[allowedYears.length - 1];
+
   const [committedFinancials, setCommittedFinancials] = useState<Financials | null>(null);
   const [draftFinancials, setDraftFinancials] = useState<Financials | null>(null);
+  const [committedVersion, setCommittedVersion] = useState(0);
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [lastCommittedAt, setLastCommittedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tenantId) {
       setCommittedFinancials(null);
       setDraftFinancials(null);
+      setCommittedVersion(0);
+      setDraftVersion(0);
+      setLastCommittedAt(null);
       return;
     }
     const raw = DatabaseService.getFinancials(tenantId);
     const normalized = normalizeFinancials(raw);
     setCommittedFinancials(cloneFinancials(normalized));
     setDraftFinancials(cloneFinancials(normalized));
+    const initialVersion = Date.now();
+    setCommittedVersion(initialVersion);
+    setDraftVersion(initialVersion);
+    setLastCommittedAt(findLatestSavedAt(normalized));
   }, [tenantId]);
 
   useEffect(() => {
@@ -241,18 +372,55 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     }
   }, [tenantId, committedFinancials]);
 
-  const hasUnsavedChanges = useMemo(() => {
-    if (!draftFinancials || !committedFinancials) {
-      return false;
-    }
-    return JSON.stringify(draftFinancials) !== JSON.stringify(committedFinancials);
-  }, [draftFinancials, committedFinancials]);
+  const unsavedStructure = useMemo(() => (
+    !deepEqual(
+      extractStructureSlice(draftFinancials),
+      extractStructureSlice(committedFinancials),
+    )
+  ), [draftFinancials, committedFinancials]);
 
-  const commitDraft = useCallback(() => {
-    if (!draftFinancials) {
+  const unsavedFixed = useMemo(() => (
+    !deepEqual(
+      extractFixedSlice(draftFinancials),
+      extractFixedSlice(committedFinancials),
+    )
+  ), [draftFinancials, committedFinancials]);
+
+  const unsavedStatement = useMemo(() => (
+    !deepEqual(
+      extractStatementSlice(draftFinancials),
+      extractStatementSlice(committedFinancials),
+    )
+  ), [draftFinancials, committedFinancials]);
+
+  const hasUnsavedChanges = unsavedStructure || unsavedFixed || unsavedStatement;
+
+  const commitDraft = useCallback((override?: Financials) => {
+    const base = override ? cloneFinancials(override) : (draftFinancials ? cloneFinancials(draftFinancials) : null);
+    if (!base) {
       return;
     }
-    setCommittedFinancials(cloneFinancials(draftFinancials));
+
+    const timestamp = new Date().toISOString();
+    base.monthMeta = base.monthMeta ? { ...base.monthMeta } : {};
+
+    collectMonths(base).forEach(month => {
+      if (monthHasData(base, month)) {
+        const existing = base.monthMeta?.[month];
+        base.monthMeta[month] = {
+          createdAt: existing?.createdAt ?? timestamp,
+          sourceType: existing?.sourceType ?? 'template',
+          sourceMonth: existing?.sourceMonth,
+          savedAt: timestamp,
+        };
+      }
+    });
+
+    setCommittedFinancials(base);
+    setDraftFinancials(cloneFinancials(base));
+    setLastCommittedAt(timestamp);
+    setCommittedVersion(prev => prev + 1);
+    setDraftVersion(prev => prev + 1);
   }, [draftFinancials]);
 
   const resetDraft = useCallback(() => {
@@ -260,6 +428,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       return;
     }
     setDraftFinancials(cloneFinancials(committedFinancials));
+    setDraftVersion(prev => prev + 1);
   }, [committedFinancials]);
 
   const workingFinancials = draftFinancials ?? EMPTY_FINANCIALS;
@@ -397,9 +566,10 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       expense: Account[];
     };
     accountGroups: AccountGroups;
-  }) => {
+  }): Financials | null => {
+    let applied: Financials | null = null;
     setDraftFinancials(prev => {
-      if (!prev) return null;
+      if (!prev) return prev;
 
       const mergeAccounts = (previousList: Account[], incomingList: Account[]) => {
         const incomingMap = new Map(incomingList.map(acc => [acc.id, normalizeAccount(acc)]));
@@ -422,7 +592,7 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
         return result;
       };
 
-      return {
+      const next: Financials = {
         ...prev,
         accounts: {
           revenue: mergeAccounts(prev.accounts.revenue, payload.accounts.revenue),
@@ -430,9 +600,11 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
         },
         accountGroups: payload.accountGroups,
       };
+      applied = next;
+      return next;
     });
+    return applied ? cloneFinancials(applied) : null;
   }, []);
-
   const addAccount = useCallback((payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => {
     const trimmed = payload.name.trim();
     if (!trimmed) {
@@ -958,7 +1130,9 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       return null;
     }
     const committedMonthsWithData = sortMonths(
-      collectMonths(committedFinancials).filter(month => monthHasData(committedFinancials, month)),
+      collectMonths(committedFinancials)
+        .filter(month => monthHasData(committedFinancials, month))
+        .filter(month => isMonthWithinYearRange(month, minAllowedYear, maxAllowedYear)),
     );
     if (committedMonthsWithData.length === 0) {
       return null;
@@ -971,10 +1145,15 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       return before[before.length - 1];
     }
     return committedMonthsWithData[committedMonthsWithData.length - 1];
-  }, [committedFinancials]);
+  }, [committedFinancials, maxAllowedYear, minAllowedYear]);
 
-  const prepareMonth = useCallback((month: string, options: { mode: 'copyPrevious' | 'blank'; sourceMonth?: string; force?: boolean }) => {
+    const prepareMonth = useCallback((month: string, options: { mode: 'copyPrevious' | 'blank'; sourceMonth?: string; force?: boolean }) => {
     if (!month) {
+      return false;
+    }
+
+    if (!isMonthWithinYearRange(month, minAllowedYear, maxAllowedYear)) {
+      console.warn(`Attempted to prepare month ${month} outside the allowed range (${minAllowedYear}-${maxAllowedYear}).`);
       return false;
     }
 
@@ -985,9 +1164,9 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
 
       const normalizedMonth = month;
       const next = cloneFinancials(prev);
+      next.monthMeta = next.monthMeta ? { ...next.monthMeta } : {};
 
       const existingData = monthHasData(next, normalizedMonth);
-
       if (existingData && !options.force) {
         return prev;
       }
@@ -1002,14 +1181,23 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
       const cloneDeep = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
       let resolvedSource = options.sourceMonth;
+      let sourceType: MonthSourceType = 'template';
+      let sourceMonth: string | undefined;
+
       if (options.mode === 'copyPrevious') {
         const fallbackSource = getDefaultSourceMonth(normalizedMonth);
         if (!resolvedSource || !monthHasData(prev, resolvedSource)) {
           resolvedSource = fallbackSource ?? undefined;
         }
+        if (resolvedSource && monthHasData(prev, resolvedSource) && isMonthWithinYearRange(resolvedSource, minAllowedYear, maxAllowedYear)) {
+          sourceType = 'copy';
+          sourceMonth = resolvedSource;
+        } else {
+          resolvedSource = undefined;
+        }
       }
 
-      if (options.mode === 'copyPrevious' && resolvedSource && monthHasData(prev, resolvedSource)) {
+      if (sourceType === 'copy' && resolvedSource) {
         next.transactionData[normalizedMonth] = cloneDeep(prev.transactionData[resolvedSource] || {});
         next.manualData[normalizedMonth] = cloneDeep(prev.manualData[resolvedSource] || {});
         next.monthlyOverrides = next.monthlyOverrides || {};
@@ -1033,11 +1221,20 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
             id: createId('fca'),
             templateId: templateItem.id,
             month: normalizedMonth,
-            amount: templateItem.monthlyCost,
-            isActive: true,
+            amount: 0,
+            isActive: false,
           });
         });
+        sourceType = 'template';
+        sourceMonth = undefined;
       }
+
+      const createdAt = new Date().toISOString();
+      next.monthMeta[normalizedMonth] = {
+        createdAt,
+        sourceType,
+        ...(sourceMonth ? { sourceMonth } : {}),
+      };
 
       prepared = true;
       return next;
@@ -1049,14 +1246,26 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
   const monthMetadata = useMemo(() => {
     const committedMonths = collectMonths(committedFinancials);
     const draftMonths = collectMonths(draftFinancials);
-    const combined = sortMonths(Array.from(new Set<string>([...committedMonths, ...draftMonths])));
+    const combined = sortMonths(Array.from(new Set<string>([
+      ...committedMonths,
+      ...draftMonths,
+    ]))).filter(monthValue => isMonthWithinYearRange(monthValue, minAllowedYear, maxAllowedYear));
 
     return combined.map(monthValue => ({
       month: monthValue,
       hasCommittedData: monthHasData(committedFinancials, monthValue),
       hasDraftData: monthHasData(draftFinancials, monthValue),
+      committedMeta: committedFinancials?.monthMeta?.[monthValue],
+      draftMeta: draftFinancials?.monthMeta?.[monthValue] ?? committedFinancials?.monthMeta?.[monthValue],
     }));
-  }, [committedFinancials, draftFinancials]);
+  }, [committedFinancials, draftFinancials, maxAllowedYear, minAllowedYear]);
+
+  const yearConfig: YearConfiguration = useMemo(() => ({
+    currentYear,
+    minYear: minAllowedYear,
+    maxYear: maxAllowedYear,
+    allowedYears,
+  }), [allowedYears, currentYear, maxAllowedYear, minAllowedYear]);
 
   const variableState: VariableAccountsState = useMemo(() => ({
     accounts: {
@@ -1153,12 +1362,24 @@ const useFinancialData = (tenantId: string | undefined): UseFinancialDataReturn 
     variable: variableState,
     fixed: fixedState,
     statement: statementState,
+    unsaved: {
+      structure: unsavedStructure,
+      fixed: unsavedFixed,
+      statement: unsavedStatement,
+      any: hasUnsavedChanges,
+    },
     hasUnsavedChanges,
     commitDraft,
     resetDraft,
     monthMetadata,
+    yearConfig,
     prepareMonth,
     getDefaultSourceMonth,
+    lastCommittedAt,
+    versions: {
+      draft: draftVersion,
+      committed: committedVersion,
+    },
   };
 
   if (!draftFinancials || !committedFinancials) {

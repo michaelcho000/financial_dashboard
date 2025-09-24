@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FixedCostActual, FixedCostTemplate, FixedCostType } from '../types';
 import { formatCurrency } from '../utils/formatters';
+import NotificationModal from '../components/common/NotificationModal';
+import useSaveNotification from '../hooks/useSaveNotification';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import ConfirmationModal from '../components/common/ConfirmationModal';
 import { useFinancials } from '../contexts/FinancialDataContext';
@@ -318,7 +320,8 @@ const FixedCostItemModal: React.FC<{
 };
 
 const FixedCostsPage: React.FC = () => {
-  const { fixed, currentMonths, setCurrentMonths, commitDraft, hasUnsavedChanges } = useFinancials();
+  const { fixed, currentMonths, setCurrentMonths, commitDraft, resetDraft, unsaved, versions } = useFinancials();
+  const { notifySave, notifyCancel, notificationProps } = useSaveNotification();
   const [activeTab, setActiveTab] = useState<FixedCostType>('ASSET_FINANCE');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FixedCostTemplate | null>(null);
@@ -341,6 +344,28 @@ const FixedCostsPage: React.FC = () => {
     () => fixed.templates.filter(item => item.costType === activeTab),
     [fixed.templates, activeTab],
   );
+
+  const handleCommitChanges = () => {
+    if (!unsaved.fixed) {
+      return;
+    }
+    commitDraft();
+    setAmountDrafts({});
+    notifySave('고정비 데이터를 저장했습니다.');
+  };
+
+  const handleCancelChanges = () => {
+    if (!unsaved.fixed) {
+      return;
+    }
+    resetDraft();
+    setAmountDrafts({});
+    notifyCancel('고정비 변경사항을 취소했습니다.');
+  };
+
+  useEffect(() => {
+    setAmountDrafts({});
+  }, [versions.draft]);
 
   const handleSaveTemplate = (payload: FixedCostModalPayload) => {
     const groupLabel = COST_TYPE_GROUP_LABEL[payload.costType];
@@ -457,17 +482,25 @@ const FixedCostsPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={commitDraft}
-              disabled={!hasUnsavedChanges}
-              className={`px-4 py-2 rounded-md text-sm font-semibold ${hasUnsavedChanges ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+              onClick={handleCancelChanges}
+              disabled={!unsaved.fixed}
+              className={`px-4 py-2 rounded-md text-sm font-semibold ${unsaved.fixed ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
             >
-              변경사항 저장
+              변경 취소
             </button>
             <button
               onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-semibold rounded-md hover:bg-gray-100"
             >
               + 고정비 항목 추가
+            </button>
+            <button
+              type="button"
+              onClick={handleCommitChanges}
+              disabled={!unsaved.fixed}
+              className={`px-4 py-2 rounded-md text-sm font-semibold ${unsaved.fixed ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+            >
+              변경사항 저장
             </button>
           </div>
         )}
@@ -610,6 +643,7 @@ const FixedCostsPage: React.FC = () => {
           onCancel={() => setDeletionTarget(null)}
         />
       )}
+      <NotificationModal {...notificationProps} />
     </>
   );
 };

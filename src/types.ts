@@ -9,8 +9,8 @@ export interface Account {
   id: string;
   name: string;
   category: AccountCategory;
-  costBehavior?: CostBehavior; // 지출 계정 비용 성격 (없으면 변동비)
-  group?: string; // Grouping for display (e.g., '인건비')
+  costBehavior?: CostBehavior;
+  group?: string;
   isDeletable: boolean;
   entryType: 'manual' | 'transaction';
   isTemporary?: boolean;
@@ -26,34 +26,27 @@ export interface Transaction {
 export type FixedCostType = 'ASSET_FINANCE' | 'OPERATING_SERVICE';
 
 export interface FixedCostTemplate {
-  id: string; // 템플릿 고유 ID
-  accountId: string; // '계정 관리'에 등록된 고정비 계정 ID
+  id: string;
+  accountId: string;
   costType: FixedCostType;
-
-  // 공통 정보
-  serviceName: string; // 서비스/자산명 ('계정 관리'와 동기화)
-  vendor: string; // 업체명 (예: '롯데카드', 'KT 통신')
-  monthlyCost: number; // 기본 월 납입액/사용료
-  paymentDate?: string; // 출금일
-
-  // 자산형(ASSET_FINANCE)에만 해당
+  serviceName: string;
+  vendor: string;
+  monthlyCost: number;
+  paymentDate?: string;
   leaseTermMonths?: number;
   contractStartDate?: string;
   contractEndDate?: string;
-
-  // 운영 서비스(OPERATING_SERVICE)에만 해당
   contractDetails?: string;
   renewalDate?: string;
 }
 
 export interface FixedCostActual {
-  id: string; // 고유 ID
-  templateId: string; // FixedCostTemplate 참조
-  month: string; // 적용 월 (YYYY-MM)
-  amount: number; // 해당 월 납입액 (수정 가능)
-  isActive: boolean; // 해당 월에 반영 여부
+  id: string;
+  templateId: string;
+  month: string;
+  amount: number;
+  isActive: boolean;
 }
-
 
 export interface TransactionData {
   [month: string]: {
@@ -119,7 +112,7 @@ export interface VariableAccountsState {
       expense: Account[];
     };
     accountGroups: AccountGroups;
-  }) => void;
+  }) => Financials | null;
   addAccount: (payload: { name: string; category: AccountCategory; group: string; costBehavior?: CostBehavior }) => void;
   removeAccount: (id: string) => void;
   updateAccount: (accountId: string, updates: Partial<Pick<Account, 'name' | 'group'>>) => void;
@@ -134,7 +127,7 @@ export interface VariableAccountsState {
 }
 
 export interface FixedCostsState {
-  accounts: Account[]; // 고정비 계정 (expense 중 costBehavior === 'fixed')
+  accounts: Account[];
   templates: FixedCostTemplate[];
   actuals: FixedCostActual[];
   addTemplate: (item: Omit<FixedCostTemplate, 'id'>) => string;
@@ -161,50 +154,90 @@ export interface IncomeStatementState {
   removeMonthlyAccount: (month: string, accountId: string) => void;
 }
 
+export type MonthSourceType = 'template' | 'copy';
+
+export interface MonthMetadataEntry {
+  createdAt: string;
+  sourceType: MonthSourceType;
+  sourceMonth?: string;
+  savedAt?: string;
+}
+
+export type MonthMetadataMap = Record<string, MonthMetadataEntry>;
+
+export interface YearConfiguration {
+  currentYear: number;
+  minYear: number;
+  maxYear: number;
+  allowedYears: number[];
+}
+
+export interface MonthOverview {
+  month: string;
+  hasCommittedData: boolean;
+  hasDraftData: boolean;
+  committedMeta?: MonthMetadataEntry;
+  draftMeta?: MonthMetadataEntry;
+}
+
+export interface UnsavedChangesState {
+  structure: boolean;
+  fixed: boolean;
+  statement: boolean;
+  any: boolean;
+}
+
+export interface DataVersions {
+  draft: number;
+  committed: number;
+}
+
 export interface UseFinancialDataReturn {
   variable: VariableAccountsState;
   fixed: FixedCostsState;
   statement: IncomeStatementState;
-  hasUnsavedChanges: boolean;
-  commitDraft: () => void;
+  unsaved: UnsavedChangesState;
+  commitDraft: (override?: Financials) => void;
   resetDraft: () => void;
-  monthMetadata: Array<{ month: string; hasCommittedData: boolean; hasDraftData: boolean }>;
+  monthMetadata: MonthOverview[];
+  yearConfig: YearConfiguration;
   prepareMonth: (month: string, options: { mode: 'copyPrevious' | 'blank'; sourceMonth?: string; force?: boolean }) => boolean;
   getDefaultSourceMonth: (targetMonth?: string) => string | null;
+  lastCommittedAt: string | null;
+  versions: DataVersions;
+  hasUnsavedChanges: boolean;
 }
 
-
-// New types for Auth and DB
 export interface AuthContextType {
-    currentUser: User | null;
-    activeTenantId: string | null;
-    loading: boolean;
-    login: (id: string, password?: string) => Promise<User | null>;
-    logout: () => void;
-    setActiveTenantId: (tenantId: string) => void;
-    availableTenants: Tenant[];
-    exitHospitalManagement: () => void;
-    isInHospitalManagementMode: boolean;
+  currentUser: User | null;
+  activeTenantId: string | null;
+  loading: boolean;
+  login: (id: string, password?: string) => Promise<User | null>;
+  logout: () => void;
+  setActiveTenantId: (tenantId: string) => void;
+  availableTenants: Tenant[];
+  exitHospitalManagement: () => void;
+  isInHospitalManagementMode: boolean;
 }
 
 export interface Financials {
-    templateVersion?: string; // 이 병원 데이터가 기반한 템플릿 버전
-    accounts: {
-        revenue: Account[];
-        expense: Account[];
-    };
-    accountGroups: AccountGroups;
-    transactionData: TransactionData;
-    manualData: ManualData;
-    fixedCostTemplates: FixedCostTemplate[];
-    fixedCostActuals: FixedCostActual[];
-    monthlyOverrides?: MonthlyAccountOverrides;
+  templateVersion?: string;
+  accounts: {
+    revenue: Account[];
+    expense: Account[];
+  };
+  accountGroups: AccountGroups;
+  transactionData: TransactionData;
+  manualData: ManualData;
+  fixedCostTemplates: FixedCostTemplate[];
+  fixedCostActuals: FixedCostActual[];
+  monthlyOverrides?: MonthlyAccountOverrides;
+  monthMeta?: MonthMetadataMap;
 }
 
-// 시스템 설정을 위한 템플릿 구조
 export interface SystemSettings {
   tenantTemplate: {
-    version: string;  // 템플릿 전용 버전 관리
+    version: string;
     accountGroups: {
       revenue: string[];
       expense: string[];
@@ -215,11 +248,11 @@ export interface SystemSettings {
     };
     fixedCostTemplates: FixedCostTemplate[];
     fixedCostActualDefaults?: FixedCostActual[];
-    initialMonths: string[];   // 기본 제공 월(예: ['2025-08'])
+    initialMonths: string[];
     manualDataDefaults?: ManualData;
     transactionDataDefaults?: TransactionData;
+    monthMetaDefaults?: MonthMetadataMap;
   };
-  // 향후 확장을 위한 placeholder
   branding?: {
     systemName?: string;
     logoUrl?: string;
@@ -234,10 +267,10 @@ export interface SystemSettings {
 }
 
 export interface DB {
-    users: User[];
-    tenants: Tenant[];
-    financialData: {
-        [tenantId: string]: Financials;
-    };
-    settings?: SystemSettings;
+  users: User[];
+  tenants: Tenant[];
+  financialData: {
+    [tenantId: string]: Financials;
+  };
+  settings?: SystemSettings;
 }

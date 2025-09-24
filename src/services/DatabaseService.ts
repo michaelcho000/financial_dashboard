@@ -103,6 +103,18 @@ const initialFinancials: Financials = {
         { id: 'fca-2025-07-fcl-5', templateId: 'fcl-5', month: '2025-07', amount: 5000000, isActive: true },
     ],
     monthlyOverrides: {},
+    monthMeta: {
+        '2025-08': {
+            createdAt: '2025-08-01T00:00:00.000Z',
+            sourceType: 'template',
+            savedAt: '2025-08-31T00:00:00.000Z',
+        },
+        '2025-07': {
+            createdAt: '2025-07-01T00:00:00.000Z',
+            sourceType: 'template',
+            savedAt: '2025-07-31T00:00:00.000Z',
+        },
+    },
 };
 
 const normalizeLegacyRevenueAccount = (raw: any): Account => ({
@@ -222,6 +234,7 @@ function createFinancialsFromTemplate(template: SystemSettings['tenantTemplate']
         fixedCostTemplates: JSON.parse(JSON.stringify(template.fixedCostTemplates)),
         fixedCostActuals: template.fixedCostActualDefaults ? JSON.parse(JSON.stringify(template.fixedCostActualDefaults)) : [],
         monthlyOverrides: {},
+        monthMeta: template.monthMetaDefaults ? JSON.parse(JSON.stringify(template.monthMetaDefaults)) : {},
     };
 }
 

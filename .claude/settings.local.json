@@ -22,7 +22,8 @@
       "Bash(git add:*)",
       "Bash(git push:*)",
       "Bash(git config:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(pgrep:*)"
     ],
     "deny": [],
     "ask": []
