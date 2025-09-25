@@ -1,6 +1,7 @@
-import React from 'react';
+﻿import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { featureFlags } from './config/featureFlags';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import StaffLayout from './layouts/StaffLayout';
@@ -16,6 +17,7 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminTenantsPage from './pages/AdminTenantsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import SettingsPage from './pages/SettingsPage';
+import CostingRouter from './pages/costing/CostingRouter';
 
 const App: React.FC = () => {
     const { currentUser, loading } = useAuth();
@@ -26,7 +28,6 @@ const App: React.FC = () => {
 
     return (
         <Routes>
-            {/* 루트 경로 명시적 처리 */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
 
@@ -47,15 +48,18 @@ const App: React.FC = () => {
                 }
             />
 
-            <Route 
+            <Route
                 path="/*"
                 element={
                     <ProtectedRoute role="generalAdmin">
                         <StaffLayout>
-                             <Routes>
+                            <Routes>
                                 <Route path="dashboard" element={<DashboardPage />} />
                                 <Route path="income-statement" element={<IncomeStatementPage />} />
                                 <Route path="fixed-costs" element={<FixedCostsPage />} />
+                                {featureFlags.costingModule && (
+                                    <Route path="costing/*" element={<CostingRouter />} />
+                                )}
                                 <Route path="account-management" element={<AccountManagementPage />} />
                                 <Route path="reports" element={<MonthlyReportPage />} />
                                 <Route path="" element={<Navigate to="dashboard" replace />} />
@@ -65,12 +69,15 @@ const App: React.FC = () => {
                     </ProtectedRoute>
                 }
             />
-            
-            <Route 
-                path="*" 
+
+            <Route
+                path="*"
                 element={
-                    <Navigate to={currentUser ? (currentUser.role === 'superAdmin' ? '/admin' : '/dashboard') : '/login'} replace />
-                } 
+                    <Navigate
+                        to={currentUser ? (currentUser.role === 'superAdmin' ? '/admin' : '/dashboard') : '/login'}
+                        replace
+                    />
+                }
             />
         </Routes>
     );
