@@ -1,4 +1,4 @@
-﻿import { ConsumablePricingInput, CostingResultRow, InsightPayload, ProcedureVariantInput, SnapshotStatus, StaffCapacityInput, FixedCostItemState } from '../types';
+﻿import { ConsumablePricingInput, CostingResultRow, InsightPayload, ProcedureVariantInput, BaselineStatus, StaffCapacityInput, FixedCostItemState } from '../types';
 
 const STORAGE_KEY = 'costing.local.v1';
 
@@ -26,11 +26,11 @@ interface StoredProcedureDefinition {
   variants: StoredProcedureVariant[];
 }
 
-interface StoredSnapshot {
+interface StoredBaseline {
   id: string;
   tenantId: string | null;
   month: string;
-  status: SnapshotStatus;
+  status: BaselineStatus;
   includeFixedCosts: boolean;
   appliedFixedCostIds: string[];
   lockedAt: string | null;
@@ -48,14 +48,14 @@ interface StoredResults {
 
 interface StoredJob {
   jobId: string;
-  snapshotId: string;
+  baselineId: string;
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED';
   queuedAt: string;
   completedAt?: string;
 }
 
 interface LocalCostingDB {
-  snapshots: Record<string, StoredSnapshot>;
+  baselines: Record<string, StoredBaseline>;
   staff: Record<string, StaffCapacityInput[]>;
   consumables: Record<string, ConsumablePricingInput[]>;
   procedures: Record<string, StoredProcedureDefinition[]>;
@@ -68,7 +68,7 @@ interface LocalCostingDB {
 }
 
 const defaultDB: LocalCostingDB = {
-  snapshots: {},
+  baselines: {},
   staff: {},
   consumables: {},
   procedures: {},
@@ -147,4 +147,4 @@ export const localDB = {
   clone,
 };
 
-export type { StoredProcedureDefinition, StoredProcedureVariant, StoredSnapshot, StoredResults, StoredJob, LocalCostingDB };
+export type { StoredProcedureDefinition, StoredProcedureVariant, StoredBaseline, StoredResults, StoredJob, LocalCostingDB };

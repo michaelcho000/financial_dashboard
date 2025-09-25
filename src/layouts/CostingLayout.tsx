@@ -1,13 +1,13 @@
 ﻿import React from 'react';
-import { CostingSnapshotProvider } from '../contexts/CostingSnapshotContext';
+import { CostingBaselineProvider } from '../contexts/CostingBaselineContext';
 
 const CostingLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <CostingSnapshotProvider>
+    <CostingBaselineProvider>
       <div className="space-y-6">
         {children}
       </div>
-    </CostingSnapshotProvider>
+    </CostingBaselineProvider>
   );
 };
 

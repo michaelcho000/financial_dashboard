@@ -1,27 +1,27 @@
-﻿export type SnapshotStatus = 'DRAFT' | 'READY' | 'LOCKED';
+﻿export type BaselineStatus = 'DRAFT' | 'READY' | 'LOCKED';
 
-export interface SnapshotSummary {
+export interface BaselineSummary {
   id: string;
   month: string; // YYYY-MM
-  status: SnapshotStatus;
+  status: BaselineStatus;
   includeFixedCosts: boolean;
   lockedAt: string | null;
   lastCalculatedAt: string | null;
   createdAt: string;
 }
 
-export interface SnapshotDetail extends SnapshotSummary {
+export interface BaselineDetail extends BaselineSummary {
   appliedFixedCostIds: string[];
 }
 
-export interface SnapshotCreatePayload {
+export interface BaselineCreatePayload {
   month: string;
-  sourceSnapshotId?: string | null;
+  sourceBaselineId?: string | null;
   includeFixedCosts: boolean;
 }
 
-export interface SnapshotUpdatePayload {
-  status?: SnapshotStatus;
+export interface BaselineUpdatePayload {
+  status?: BaselineStatus;
   includeFixedCosts?: boolean;
 }
 
@@ -35,7 +35,7 @@ export interface FixedCostItemState {
 
 export interface FixedCostSelectionPayload {
   includeFixedCosts: boolean;
-  items: Array<{ templateId: string; included: boolean }>;
+  items: FixedCostItemState[];
 }
 
 export interface StaffCapacityInput {
@@ -149,40 +149,40 @@ export interface RecalculateResponse {
   completedAt?: string;
 }
 
-export interface CostingSnapshotService {
-  listSnapshots(): Promise<SnapshotSummary[]>;
-  getSnapshot(id: string): Promise<SnapshotDetail>;
-  createSnapshot(payload: SnapshotCreatePayload): Promise<SnapshotDetail>;
-  updateSnapshot(id: string, payload: SnapshotUpdatePayload): Promise<SnapshotDetail>;
-  lockSnapshot(id: string): Promise<void>;
-  unlockSnapshot(id: string): Promise<void>;
+export interface CostingBaselineService {
+  listBaselines(): Promise<BaselineSummary[]>;
+  getBaseline(id: string): Promise<BaselineDetail>;
+  createBaseline(payload: BaselineCreatePayload): Promise<BaselineDetail>;
+  updateBaseline(id: string, payload: BaselineUpdatePayload): Promise<BaselineDetail>;
+  lockBaseline(id: string): Promise<void>;
+  unlockBaseline(id: string): Promise<void>;
 }
 
 export interface FixedCostLinkService {
-  getSelection(snapshotId: string): Promise<{ includeFixedCosts: boolean; items: FixedCostItemState[] }>;
-  updateSelection(snapshotId: string, payload: FixedCostSelectionPayload): Promise<void>;
+  getSelection(baselineId: string): Promise<{ includeFixedCosts: boolean; items: FixedCostItemState[] }>;
+  updateSelection(baselineId: string, payload: FixedCostSelectionPayload): Promise<void>;
 }
 
 export interface StaffDataService {
-  getStaff(snapshotId: string): Promise<StaffCapacityInput[]>;
-  upsertStaff(snapshotId: string, input: StaffCapacityInput[]): Promise<void>;
+  getStaff(baselineId: string): Promise<StaffCapacityInput[]>;
+  upsertStaff(baselineId: string, input: StaffCapacityInput[]): Promise<void>;
 }
 
 export interface ConsumableDataService {
-  getConsumables(snapshotId: string): Promise<ConsumablePricingInput[]>;
-  upsertConsumables(snapshotId: string, input: ConsumablePricingInput[]): Promise<void>;
+  getConsumables(baselineId: string): Promise<ConsumablePricingInput[]>;
+  upsertConsumables(baselineId: string, input: ConsumablePricingInput[]): Promise<void>;
 }
 
 export interface ProcedureDataService {
-  listProcedures(snapshotId: string): Promise<ProcedureSummary[]>;
-  createProcedure(snapshotId: string, input: ProcedureDefinitionInput): Promise<ProcedureSummary>;
-  updateProcedureVariant(snapshotId: string, variantId: string, input: ProcedureVariantInput): Promise<ProcedureSummary>;
-  deleteProcedureVariant(snapshotId: string, variantId: string): Promise<void>;
+  listProcedures(baselineId: string): Promise<ProcedureSummary[]>;
+  createProcedure(baselineId: string, input: ProcedureDefinitionInput): Promise<ProcedureSummary>;
+  updateProcedureVariant(baselineId: string, variantId: string, input: ProcedureVariantInput): Promise<ProcedureSummary>;
+  deleteProcedureVariant(baselineId: string, variantId: string): Promise<void>;
 }
 
 export interface CostingCalculationService {
-  recalculate(snapshotId: string): Promise<RecalculateResponse>;
-  getResults(snapshotId: string, params?: { sort?: string; order?: 'asc' | 'desc'; search?: string }): Promise<CostingResultRow[]>;
-  getInsights(snapshotId: string): Promise<InsightPayload>;
-  exportResults(snapshotId: string, format: 'csv' | 'xlsx'): Promise<Blob | ArrayBuffer>;
+  recalculate(baselineId: string): Promise<RecalculateResponse>;
+  getResults(baselineId: string, params?: { sort?: string; order?: 'asc' | 'desc'; search?: string }): Promise<CostingResultRow[]>;
+  getInsights(baselineId: string): Promise<InsightPayload>;
+  exportResults(baselineId: string, format: 'csv' | 'xlsx'): Promise<Blob | ArrayBuffer>;
 }

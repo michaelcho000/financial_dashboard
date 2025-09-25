@@ -5,7 +5,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE IF NOT EXISTS month_snapshots (
+CREATE TABLE IF NOT EXISTS month_baselines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     month TEXT NOT NULL CHECK (month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
@@ -20,21 +20,21 @@ CREATE TABLE IF NOT EXISTS month_snapshots (
     UNIQUE (tenant_id, month)
 );
 
-CREATE INDEX IF NOT EXISTS idx_month_snapshots_tenant_status
-    ON month_snapshots (tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_month_baselines_tenant_status
+    ON month_baselines (tenant_id, status);
 
-CREATE TABLE IF NOT EXISTS snapshot_fixed_cost_links (
+CREATE TABLE IF NOT EXISTS baseline_fixed_cost_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     fixed_cost_template_id UUID NOT NULL,
     included BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (snapshot_id, fixed_cost_template_id)
+    UNIQUE (baseline_id, fixed_cost_template_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_snapshot_fixed_cost_links_snapshot
-    ON snapshot_fixed_cost_links (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_fixed_cost_links_baseline
+    ON baseline_fixed_cost_links (baseline_id);
 
 CREATE TABLE IF NOT EXISTS procedure_definitions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS procedure_definitions (
 
 CREATE TABLE IF NOT EXISTS staff_capacities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     role_id UUID,
     role_name TEXT NOT NULL,
     monthly_payroll NUMERIC(14, 2) NOT NULL,
@@ -57,12 +57,12 @@ CREATE TABLE IF NOT EXISTS staff_capacities (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_staff_capacities_snapshot
-    ON staff_capacities (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_staff_capacities_baseline
+    ON staff_capacities (baseline_id);
 
 CREATE TABLE IF NOT EXISTS consumable_prices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     consumable_id UUID,
     consumable_name TEXT NOT NULL,
     purchase_cost NUMERIC(14, 2) NOT NULL,
@@ -72,12 +72,12 @@ CREATE TABLE IF NOT EXISTS consumable_prices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_consumable_prices_snapshot
-    ON consumable_prices (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_consumable_prices_baseline
+    ON consumable_prices (baseline_id);
 
 CREATE TABLE IF NOT EXISTS procedure_variants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     procedure_definition_id UUID NOT NULL REFERENCES procedure_definitions (id) ON DELETE CASCADE,
     label TEXT NOT NULL,
     sale_price NUMERIC(14, 2) NOT NULL DEFAULT 0,
@@ -87,11 +87,11 @@ CREATE TABLE IF NOT EXISTS procedure_variants (
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (snapshot_id, procedure_definition_id, label)
+    UNIQUE (baseline_id, procedure_definition_id, label)
 );
 
-CREATE INDEX IF NOT EXISTS idx_procedure_variants_snapshot
-    ON procedure_variants (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_procedure_variants_baseline
+    ON procedure_variants (baseline_id);
 
 CREATE TABLE IF NOT EXISTS procedure_staff_mix (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS procedure_equipment_links (
 
 CREATE TABLE IF NOT EXISTS procedure_cost_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     procedure_variant_id UUID NOT NULL REFERENCES procedure_variants (id) ON DELETE CASCADE,
     sale_price NUMERIC(14, 2) NOT NULL,
     case_count INTEGER NOT NULL DEFAULT 0,
@@ -137,15 +137,15 @@ CREATE TABLE IF NOT EXISTS procedure_cost_results (
     margin_per_minute NUMERIC(14, 6),
     cost_breakdown JSONB NOT NULL DEFAULT '{}'::JSONB,
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (snapshot_id, procedure_variant_id)
+    UNIQUE (baseline_id, procedure_variant_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_procedure_cost_results_snapshot
-    ON procedure_cost_results (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_procedure_cost_results_baseline
+    ON procedure_cost_results (baseline_id);
 
 CREATE TABLE IF NOT EXISTS procedure_performance_summaries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     procedure_variant_id UUID NOT NULL REFERENCES procedure_variants (id) ON DELETE CASCADE,
     total_cases INTEGER NOT NULL DEFAULT 0,
     total_revenue NUMERIC(14, 2) NOT NULL DEFAULT 0,
@@ -155,15 +155,15 @@ CREATE TABLE IF NOT EXISTS procedure_performance_summaries (
     avg_margin_rate NUMERIC(9, 6),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (snapshot_id, procedure_variant_id)
+    UNIQUE (baseline_id, procedure_variant_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_procedure_performance_summaries_snapshot
-    ON procedure_performance_summaries (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_procedure_performance_summaries_baseline
+    ON procedure_performance_summaries (baseline_id);
 
 CREATE TABLE IF NOT EXISTS month_insight_summaries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snapshot_id UUID NOT NULL REFERENCES month_snapshots (id) ON DELETE CASCADE,
+    baseline_id UUID NOT NULL REFERENCES month_baselines (id) ON DELETE CASCADE,
     top_procedure_by_volume UUID,
     top_procedure_by_margin UUID,
     lowest_margin_rate_procedure UUID,
@@ -172,11 +172,11 @@ CREATE TABLE IF NOT EXISTS month_insight_summaries (
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (snapshot_id)
+    UNIQUE (baseline_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_month_insight_summaries_snapshot
-    ON month_insight_summaries (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_month_insight_summaries_baseline
+    ON month_insight_summaries (baseline_id);
 
 COMMIT;
 
@@ -192,6 +192,6 @@ COMMIT;
 --   DROP TABLE IF EXISTS consumable_prices;
 --   DROP TABLE IF EXISTS staff_capacities;
 --   DROP TABLE IF EXISTS procedure_definitions;
---   DROP TABLE IF EXISTS snapshot_fixed_cost_links;
---   DROP TABLE IF EXISTS month_snapshots;
+--   DROP TABLE IF EXISTS baseline_fixed_cost_links;
+--   DROP TABLE IF EXISTS month_baselines;
 -- COMMIT;

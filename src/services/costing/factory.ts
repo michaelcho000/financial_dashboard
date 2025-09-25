@@ -1,6 +1,6 @@
 ﻿import {
   CostingCalculationService,
-  CostingSnapshotService,
+  CostingBaselineService,
   FixedCostLinkService,
   StaffDataService,
   ConsumableDataService,
@@ -26,7 +26,7 @@ const resolveBackend = (): CostingBackend => {
 };
 
 export interface CostingServicesBundle {
-  snapshotService: CostingSnapshotService;
+  baselineService: CostingBaselineService;
   fixedCostLinkService: FixedCostLinkService;
   staffDataService: StaffDataService;
   consumableDataService: ConsumableDataService;

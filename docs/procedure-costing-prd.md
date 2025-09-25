@@ -10,7 +10,7 @@
 
 ## 2. Scope
 - In-scope
-  - Monthly snapshot creation and management for costing data.
+  - Monthly baseline creation and management for costing data.
   - Data entry UI for staffing, consumables, procedures, and actual procedure counts.
   - Cost calculation engine producing per-procedure cost breakdown, margins, and insight dashboards.
   - Month-over-month comparison view (instead of scenario overrides).
@@ -26,7 +26,7 @@
 - **Clinic Owner / Director**: Reviews profitability and decides pricing strategy.
 - **Head Nurse / Staff Manager**: Maintains staffing data and validates labor allocations.
 - **Procurement Manager**: Updates consumable costs and usage assumptions.
-- **Finance/Operations Analyst**: Runs monthly snapshots, validates results, exports reports.
+- **Finance/Operations Analyst**: Runs monthly baselines, validates results, exports reports.
 
 ## 4. Success Metrics
 - Ability to generate a complete cost + margin table for all procedures within a month without manual spreadsheet work.
@@ -37,8 +37,8 @@
 ## 5. High-Level Architecture
 - **Front-end**: React + TypeScript (existing Vite app) with Context/hooks-based state management.
 - **Back-end / Services**: Extend `src/services/` with REST endpoints to manage costing data.
-- **Data Storage**: Database schema additions (see Section 7) accommodating monthly snapshots, staffing, consumables, procedures, and results.
-- **Computation Flow**: Server-side cost calculation service triggered per month snapshot, producing immutable result rows for reference and comparison.
+- **Data Storage**: Database schema additions (see Section 7) accommodating monthly baselines, staffing, consumables, procedures, and results.
+- **Computation Flow**: Server-side cost calculation service triggered per month baseline, producing immutable result rows for reference and comparison.
 - **Integration Points**:
   - Reuse existing `fixed-costs` table/service for monthly fixed cost values.
   - Pull specific equipment lease/installment costs from `fixed-costs` when a procedure references equipment via linkage.
@@ -50,14 +50,14 @@
    - orchestrates CRUD for staffing/consumables/procedures.
    - triggers `CostingEngine` to compute results.
 3. **Costing Engine**
-   - fetches snapshot data → calculates per-procedure costs → writes to `procedure_cost_result` & `procedure_performance_summary`.
+   - fetches baseline data → calculates per-procedure costs → writes to `procedure_cost_result` & `procedure_performance_summary`.
 4. **Database**
    - stores baseline data (`staff_roles`, `consumable_catalog`, etc.), monthly overrides, and calculated outputs.
 5. **Shared Fixed Cost Module**
    - existing financial module providing monthly fixed-cost values (facility, equipment leases) consumed by the costing engine.
 
-## 6. Monthly Snapshot Workflow
-1. **Create or select `month_snapshot`** (e.g., `2025-09`) → initializes baseline records with default values from previous month if available.
+## 6. Monthly Baseline Workflow
+1. **Create or select `month_baseline`** (e.g., `2025-09`) → initializes baseline records with default values from previous month if available.
 2. **Staff Setup** (`staff_capacity` entries) → user inputs role counts, monthly payroll, working days/hours.
 3. **Consumable Pricing** (`consumable_prices`) → user inputs purchase unit, purchase cost, usage unit, yield per purchase (e.g., Ulthera tip 1 set = 2,400 shots @ ₩3,500,000 → derived unit cost ≈ ₩1,458.33/shot). Document assumption: no wastage/pason handling yet.
 4. **Procedure Definition**
@@ -79,10 +79,10 @@
    - Provide detailed breakdown, month-over-month change view.
    - Support CSV export of tables.
 8. **Month Locking**
-   - Option to lock snapshot after review to prevent accidental edits.
+   - Option to lock baseline after review to prevent accidental edits.
 
 ## 7. Data Model & DB Hierarchy
-_All tables include standard metadata (`id`, `created_at`, `updated_at`, `created_by`, `updated_by`). Foreign keys cascade respecting `month_snapshot` as top-level scope._
+_All tables include standard metadata (`id`, `created_at`, `updated_at`, `created_by`, `updated_by`). Foreign keys cascade respecting `month_baseline` as top-level scope._
 
 ### 7.1 Core Reference Tables
 - `hospitals`
@@ -115,17 +115,17 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `category`
   - `is_active`
 
-### 7.2 Monthly Snapshot Tables
-- `month_snapshot`
+### 7.2 Monthly Baseline Tables
+- `month_baseline`
   - `id`
   - `hospital_id`
   - `month` (YYYY-MM)
   - `status` (draft/locked)
-  - `base_snapshot_id`
+  - `base_baseline_id`
   - `notes`
 - `fixed_cost_entries`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `category` (rent, insurance, lease-equipment, etc.)
   - `amount`
   - `allocation_scope` (`facility`, `equipment`, `manual`)
@@ -133,7 +133,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `notes`
 - `staff_capacity`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `staff_role_id`
   - `headcount`
   - `monthly_payroll`
@@ -142,7 +142,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `available_minutes` (auto-calculated via stored procedure or computed field)
 - `consumable_prices`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `consumable_id`
   - `purchase_unit_label`
   - `purchase_unit_cost`
@@ -151,7 +151,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `effective_date`
 - `procedure_variant`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `procedure_id`
   - `sale_price`
   - `procedure_minutes`
@@ -172,14 +172,14 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `usage_unit`
 - `procedure_actuals`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `procedure_variant_id`
   - `case_count`
   - `avg_procedure_minutes`
   - `avg_total_minutes`
-- `snapshot_change_log`
+- `baseline_change_log`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `entity_type`
   - `entity_id`
   - `action`
@@ -190,7 +190,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 ### 7.3 Computed Tables
 - `procedure_cost_result`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `procedure_variant_id`
   - `direct_consumable_cost`
   - `labor_cost`
@@ -205,7 +205,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `cost_breakdown_json`
 - `procedure_performance_summary`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `procedure_variant_id`
   - `total_cases`
   - `total_revenue`
@@ -215,7 +215,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `avg_margin_rate`
 - `month_insight_summary`
   - `id`
-  - `month_snapshot_id`
+  - `month_baseline_id`
   - `top_procedure_by_volume`
   - `top_procedure_by_margin`
   - `lowest_margin_rate_procedure`
@@ -225,7 +225,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 
 ### 7.4 Views & Indexes
 - `vw_costing_equipment_allocation`: joins procedures with equipment-specific fixed costs.
-- Index `(month_snapshot_id, procedure_variant_id)` on all major tables.
+- Index `(month_baseline_id, procedure_variant_id)` on all major tables.
 - Index `(equipment_id)` on `procedure_variant` and `fixed_cost_entries` for fast equipment lookups.
 
 ## 8. Cost Calculation Logic Details
@@ -258,7 +258,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 - `margin = sale_price - total_cost`.
 - `margin_rate = margin / sale_price`.
 - `margin_per_minute = margin / total_minutes`.
-- `mom_change` metrics derived by comparing current snapshot vs. previous snapshot in `month_insight_summary`.
+- `mom_change` metrics derived by comparing current baseline vs. previous baseline in `month_insight_summary`.
 
 ## 9. UI/UX Specification
 
@@ -269,7 +269,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
   - `결과 & 인사이트` (`/costing/results`)
 
 ### 9.2 Global Layout & Styling
-- Reuse main layout; add `CostingLayout` wrapper with snapshot selector at top.
+- Reuse main layout; add `CostingLayout` wrapper with baseline selector at top.
 - Global CSS: either extend `src/index.css` or add `src/styles/costing.css` (prefixed `.costing-`).
 - Components built with existing design tokens; maintain 2px border radius, typography scale consistent with project.
 - Responsiveness: tables scroll horizontally; cards wrap at breakpoints.
@@ -279,7 +279,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 #### A. 기본 설정
 - Tabs: `인력 설정`, `소모품 단가`.
 - Each tab features editable tables with “변경사항 저장하기” CTA; unsaved changes indicator.
-- Month snapshot selector locked when status = locked; editing disabled.
+- Month baseline selector locked when status = locked; editing disabled.
 
 #### B. 시술 설정
 - Master list of procedures on left; detail panel on right with tabs: `기본 정보`, `인력 구성`, `소모품 사용`, `장비 연결`.
@@ -290,14 +290,14 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 - Tabs: `시술별 원가표`, `월간 인사이트` (no scenario compare in v1).
   - `시술별 원가표`: full table with export, sort, filter.
   - `월간 인사이트`: KPI cards (volume/margin leaders, lowest margin), month-over-month change table/graph, notes column for key observations.
-- Provide compare selector: `현재 월` vs. `이전 월` (pull from locked snapshots).
+- Provide compare selector: `현재 월` vs. `이전 월` (pull from locked baselines).
 
 ### 9.4 Component Reuse & Structure
 - Reuse existing shared components.
 - New components under `src/components/costing/`:
-  - `SnapshotSelector`, `StaffCapacityTable`, `ConsumablePricingTable`, `ProcedureEditor`, `EquipmentLinker`, `CostingDataTable`, `InsightSummaryCards`, `MomChangeChart`.
-- Hooks under `src/hooks/`: `useMonthSnapshot`, `useUnsavedChanges` (shared with other modules), `useCostingResults`.
-- Context provider `CostingSnapshotProvider` to share selected snapshot and lock state across tabs.
+  - `BaselineSelector`, `StaffCapacityTable`, `ConsumablePricingTable`, `ProcedureEditor`, `EquipmentLinker`, `CostingDataTable`, `InsightSummaryCards`, `MomChangeChart`.
+- Hooks under `src/hooks/`: `useMonthBaseline`, `useUnsavedChanges` (shared with other modules), `useCostingResults`.
+- Context provider `CostingBaselineProvider` to share selected baseline and lock state across tabs.
 
 ### 9.5 Form Protection & Unsaved Changes
 - Each edit view maintains local form state; `변경사항 저장하기` commits via service.
@@ -305,29 +305,29 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 - Autosave not in scope v1.
 
 ## 10. API & Service Contracts (Conceptual)
-- `GET /costing/snapshots?hospitalId=&month=`
-- `POST /costing/snapshots`
-- `PATCH /costing/snapshots/:id`
-- `PUT /costing/snapshots/:id/staff`
-- `PUT /costing/snapshots/:id/consumables`
-- `GET /costing/snapshots/:id/procedures`
-- `POST /costing/snapshots/:id/procedures`
-- `PUT /costing/snapshots/:id/procedures/:variantId`
-- `POST /costing/snapshots/:id/recalculate`
-- `GET /costing/snapshots/:id/results`
-- `GET /costing/snapshots/:id/mom-insight`
+- `GET /costing/baselines?hospitalId=&month=`
+- `POST /costing/baselines`
+- `PATCH /costing/baselines/:id`
+- `PUT /costing/baselines/:id/staff`
+- `PUT /costing/baselines/:id/consumables`
+- `GET /costing/baselines/:id/procedures`
+- `POST /costing/baselines/:id/procedures`
+- `PUT /costing/baselines/:id/procedures/:variantId`
+- `POST /costing/baselines/:id/recalculate`
+- `GET /costing/baselines/:id/results`
+- `GET /costing/baselines/:id/mom-insight`
 - CSV upload endpoints for staff/consumables/procedures (future optional).
 
 ## 11. Validation & Edge Cases
 - Prevent calculation if required data missing: no staff capacity for referenced role, missing consumable pricing, missing equipment cost for linked equipment.
-- Locked snapshots reject write operations.
+- Locked baselines reject write operations.
 - CSV imports require schema validation; show inline error summary (row, column, reason).
 - Document assumptions: no overtime adjustment, no consumable wastage, equipment usage minutes = total minutes unless overridden.
 
 ## 12. Analytics & Reporting
-- Audit log via `snapshot_change_log` for staffing/consumables/procedures changes.
+- Audit log via `baseline_change_log` for staffing/consumables/procedures changes.
 - Usage analytics: track which tabs/users edit most to inform UX improvements.
-- Provide change history timeline per snapshot (powered by change log).
+- Provide change history timeline per baseline (powered by change log).
 
 ## 13. Security & Permissions
 - Role-based access: Admin (full), Analyst (view/export/run calculation), Editor (edit unlocked data).
@@ -341,12 +341,12 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 
 ## 15. Testing Strategy
 - Unit tests for costing engine (labor, consumable, fixed allocation).
-- Integration tests for snapshot lifecycle and calculation flows.
+- Integration tests for baseline lifecycle and calculation flows.
 - Manual smoke tests via `npm run build` + `npm run preview`.
 - Fixture-based regression tests for Ulthera tip example and other representative procedures.
 
 ## 16. Rollout Plan
-- Phase 1: Schema migrations, staffing/consumable UI, snapshot CRUD.
+- Phase 1: Schema migrations, staffing/consumable UI, baseline CRUD.
 - Phase 2: Procedure editor, equipment linkage, costing engine, result tables.
 - Phase 3: Month-over-month insights, exports, audit log UI.
 - Beta: run parallel with Excel for 1–2 months to validate accuracy; collect user feedback.
@@ -354,7 +354,7 @@ _All tables include standard metadata (`id`, `created_at`, `updated_at`, `create
 ## 17. Open Questions & Risks
 - Future: incorporate equipment idle time tracking? (Documented as enhancement.)
 - How to reconcile when fixed-cost data is corrected post-lock? Need policy (unlock vs. versioning).
-- Need fallback when previous month snapshot missing for MoM comparison (display N/A).
+- Need fallback when previous month baseline missing for MoM comparison (display N/A).
 
 ## 18. Appendices
 - **Terminology**

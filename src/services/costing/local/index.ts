@@ -3,7 +3,7 @@
   ConsumablePricingInput,
   CostingCalculationService,
   CostingResultRow,
-  CostingSnapshotService,
+  CostingBaselineService,
   CostBreakdown,
   FixedCostLinkService,
   InsightPayload,
@@ -13,10 +13,10 @@
   ProcedureVariantInput,
   ProcedureVariantSummary,
   RecalculateResponse,
-  SnapshotCreatePayload,
-  SnapshotDetail,
-  SnapshotSummary,
-  SnapshotUpdatePayload,
+  BaselineCreatePayload,
+  BaselineDetail,
+  BaselineSummary,
+  BaselineUpdatePayload,
   StaffCapacityInput,
   StaffDataService,
 } from '../types';
@@ -25,36 +25,36 @@ import {
   localDB,
   StoredProcedureDefinition,
   StoredProcedureVariant,
-  StoredSnapshot,
+  StoredBaseline,
 } from './storage';
 
-const buildSnapshotSummary = (snapshot: StoredSnapshot): SnapshotSummary => ({
-  id: snapshot.id,
-  month: snapshot.month,
-  status: snapshot.status,
-  includeFixedCosts: snapshot.includeFixedCosts,
-  lockedAt: snapshot.lockedAt,
-  lastCalculatedAt: snapshot.lastCalculatedAt,
-  createdAt: snapshot.createdAt,
+const buildBaselineSummary = (baseline: StoredBaseline): BaselineSummary => ({
+  id: baseline.id,
+  month: baseline.month,
+  status: baseline.status,
+  includeFixedCosts: baseline.includeFixedCosts,
+  lockedAt: baseline.lockedAt,
+  lastCalculatedAt: baseline.lastCalculatedAt,
+  createdAt: baseline.createdAt,
 });
 
-const buildSnapshotDetail = (snapshot: StoredSnapshot): SnapshotDetail => ({
-  ...buildSnapshotSummary(snapshot),
-  appliedFixedCostIds: [...snapshot.appliedFixedCostIds],
+const buildBaselineDetail = (baseline: StoredBaseline): BaselineDetail => ({
+  ...buildBaselineSummary(baseline),
+  appliedFixedCostIds: [...baseline.appliedFixedCostIds],
 });
 
-const ensureSnapshotExists = (snapshotId: string): StoredSnapshot => {
+const ensureBaselineExists = (baselineId: string): StoredBaseline => {
   const db = localDB.load();
-  const snapshot = db.snapshots[snapshotId];
-  if (!snapshot) {
-    throw new Error(`Snapshot(${snapshotId}) not found.`);
+  const baseline = db.baselines[baselineId];
+  if (!baseline) {
+    throw new Error(`Baseline(${baselineId}) not found.`);
   }
-  return snapshot;
+  return baseline;
 };
 
-const listProceduresInternal = (snapshotId: string): StoredProcedureDefinition[] => {
+const listProceduresInternal = (baselineId: string): StoredProcedureDefinition[] => {
   const db = localDB.load();
-  return localDB.clone(db.procedures[snapshotId] ?? []);
+  return localDB.clone(db.procedures[baselineId] ?? []);
 };
 
 const buildProcedureSummary = (definition: StoredProcedureDefinition): ProcedureSummary => ({
@@ -131,8 +131,8 @@ const calculateCostBreakdown = (
 };
 
 const calculateResults = (
-  snapshotId: string,
-  snapshot: StoredSnapshot,
+  baselineId: string,
+  baseline: StoredBaseline,
   staff: StaffCapacityInput[],
   consumables: ConsumablePricingInput[],
   procedures: StoredProcedureDefinition[]
@@ -212,26 +212,26 @@ const calculateResults = (
   return { rows, insights };
 };
 
-const snapshotService: CostingSnapshotService = {
-  async listSnapshots() {
+const baselineService: CostingBaselineService = {
+  async listBaselines() {
     const db = localDB.load();
-    return Object.values(db.snapshots)
-      .map(buildSnapshotSummary)
+    return Object.values(db.baselines)
+      .map(buildBaselineSummary)
       .sort((a, b) => b.month.localeCompare(a.month));
   },
-  async getSnapshot(id: string): Promise<SnapshotDetail> {
-    const snapshot = ensureSnapshotExists(id);
-    return buildSnapshotDetail(snapshot);
+  async getBaseline(id: string): Promise<BaselineDetail> {
+    const baseline = ensureBaselineExists(id);
+    return buildBaselineDetail(baseline);
   },
-  async createSnapshot(payload: SnapshotCreatePayload) {
+  async createBaseline(payload: BaselineCreatePayload) {
     return localDB.mutate(db => {
-      if (Object.values(db.snapshots).some(s => s.month === payload.month)) {
-        throw new Error(`Snapshot for month ${payload.month} already exists.`);
+      if (Object.values(db.baselines).some(s => s.month === payload.month)) {
+        throw new Error(`Baseline for month ${payload.month} already exists.`);
       }
 
       const id = localDB.generateId();
       const timestamp = localDB.now();
-      const snapshot: StoredSnapshot = {
+      const baseline: StoredBaseline = {
         id,
         tenantId: null,
         month: payload.month,
@@ -245,7 +245,7 @@ const snapshotService: CostingSnapshotService = {
         updatedAt: timestamp,
       };
 
-      db.snapshots[id] = snapshot;
+      db.baselines[id] = baseline;
       db.staff[id] = [];
       db.consumables[id] = [];
       db.procedures[id] = [];
@@ -254,8 +254,8 @@ const snapshotService: CostingSnapshotService = {
         items: [],
       };
 
-      if (payload.sourceSnapshotId && db.snapshots[payload.sourceSnapshotId]) {
-        const sourceId = payload.sourceSnapshotId;
+      if (payload.sourceBaselineId && db.baselines[payload.sourceBaselineId]) {
+        const sourceId = payload.sourceBaselineId;
         db.staff[id] = localDB.clone(db.staff[sourceId] ?? []);
         db.consumables[id] = localDB.clone(db.consumables[sourceId] ?? []);
         db.procedures[id] = localDB.clone(db.procedures[sourceId] ?? []);
@@ -265,66 +265,66 @@ const snapshotService: CostingSnapshotService = {
             includeFixedCosts: payload.includeFixedCosts,
             items: localDB.clone(sourceSelection.items),
           };
-          snapshot.appliedFixedCostIds = sourceSelection.items
+          baseline.appliedFixedCostIds = sourceSelection.items
             .filter(item => item.included)
             .map(item => item.templateId);
         }
       }
 
-      return buildSnapshotDetail(snapshot);
+      return buildBaselineDetail(baseline);
     });
   },
-  async updateSnapshot(id: string, payload: SnapshotUpdatePayload) {
+  async updateBaseline(id: string, payload: BaselineUpdatePayload) {
     return localDB.mutate(db => {
-      const snapshot = db.snapshots[id];
-      if (!snapshot) {
-        throw new Error(`Snapshot(${id}) not found.`);
+      const baseline = db.baselines[id];
+      if (!baseline) {
+        throw new Error(`Baseline(${id}) not found.`);
       }
       if (payload.status) {
-        snapshot.status = payload.status;
+        baseline.status = payload.status;
         if (payload.status !== 'LOCKED') {
-          snapshot.lockedAt = null;
-          snapshot.lockedBy = null;
+          baseline.lockedAt = null;
+          baseline.lockedBy = null;
         }
       }
       if (typeof payload.includeFixedCosts === 'boolean') {
-        snapshot.includeFixedCosts = payload.includeFixedCosts;
+        baseline.includeFixedCosts = payload.includeFixedCosts;
       }
-      snapshot.updatedAt = localDB.now();
-      return buildSnapshotDetail(snapshot);
+      baseline.updatedAt = localDB.now();
+      return buildBaselineDetail(baseline);
     });
   },
-  async lockSnapshot(id: string) {
+  async lockBaseline(id: string) {
     localDB.mutate(db => {
-      const snapshot = db.snapshots[id];
-      if (!snapshot) {
-        throw new Error(`Snapshot(${id}) not found.`);
+      const baseline = db.baselines[id];
+      if (!baseline) {
+        throw new Error(`Baseline(${id}) not found.`);
       }
-      snapshot.status = 'LOCKED';
-      snapshot.lockedAt = localDB.now();
-      snapshot.lockedBy = null;
-      snapshot.updatedAt = snapshot.lockedAt;
+      baseline.status = 'LOCKED';
+      baseline.lockedAt = localDB.now();
+      baseline.lockedBy = null;
+      baseline.updatedAt = baseline.lockedAt;
     });
   },
-  async unlockSnapshot(id: string) {
+  async unlockBaseline(id: string) {
     localDB.mutate(db => {
-      const snapshot = db.snapshots[id];
-      if (!snapshot) {
-        throw new Error(`Snapshot(${id}) not found.`);
+      const baseline = db.baselines[id];
+      if (!baseline) {
+        throw new Error(`Baseline(${id}) not found.`);
       }
-      snapshot.status = 'DRAFT';
-      snapshot.lockedAt = null;
-      snapshot.lockedBy = null;
-      snapshot.updatedAt = localDB.now();
+      baseline.status = 'DRAFT';
+      baseline.lockedAt = null;
+      baseline.lockedBy = null;
+      baseline.updatedAt = localDB.now();
     });
   },
 };
 
 const fixedCostLinkService: FixedCostLinkService = {
-  async getSelection(snapshotId) {
-    ensureSnapshotExists(snapshotId);
+  async getSelection(baselineId) {
+    ensureBaselineExists(baselineId);
     const db = localDB.load();
-    const existing = db.fixedCostSelections[snapshotId];
+    const existing = db.fixedCostSelections[baselineId];
     if (existing) {
       return localDB.clone(existing);
     }
@@ -333,61 +333,61 @@ const fixedCostLinkService: FixedCostLinkService = {
       items: [],
     };
   },
-  async updateSelection(snapshotId, payload) {
+  async updateSelection(baselineId, payload) {
     localDB.mutate(db => {
-      const snapshot = db.snapshots[snapshotId];
-      if (!snapshot) {
-        throw new Error(`Snapshot(${snapshotId}) not found.`);
+      const baseline = db.baselines[baselineId];
+      if (!baseline) {
+        throw new Error(`Baseline(${baselineId}) not found.`);
       }
-      db.fixedCostSelections[snapshotId] = {
+      db.fixedCostSelections[baselineId] = {
         includeFixedCosts: payload.includeFixedCosts,
         items: payload.items.map(item => ({ ...item })),
       };
-      snapshot.includeFixedCosts = payload.includeFixedCosts;
-      snapshot.appliedFixedCostIds = payload.items.filter(item => item.included).map(item => item.templateId);
-      snapshot.updatedAt = localDB.now();
+      baseline.includeFixedCosts = payload.includeFixedCosts;
+      baseline.appliedFixedCostIds = payload.items.filter(item => item.included).map(item => item.templateId);
+      baseline.updatedAt = localDB.now();
     });
   },
 };
 
 const staffDataService: StaffDataService = {
-  async getStaff(snapshotId) {
-    ensureSnapshotExists(snapshotId);
+  async getStaff(baselineId) {
+    ensureBaselineExists(baselineId);
     const db = localDB.load();
-    return localDB.clone(db.staff[snapshotId] ?? []);
+    return localDB.clone(db.staff[baselineId] ?? []);
   },
-  async upsertStaff(snapshotId, input) {
-    ensureSnapshotExists(snapshotId);
+  async upsertStaff(baselineId, input) {
+    ensureBaselineExists(baselineId);
     localDB.mutate(db => {
-      db.staff[snapshotId] = input.map(entry => ({ ...entry }));
+      db.staff[baselineId] = input.map(entry => ({ ...entry }));
     });
   },
 };
 
 const consumableDataService: ConsumableDataService = {
-  async getConsumables(snapshotId) {
-    ensureSnapshotExists(snapshotId);
+  async getConsumables(baselineId) {
+    ensureBaselineExists(baselineId);
     const db = localDB.load();
-    return localDB.clone(db.consumables[snapshotId] ?? []);
+    return localDB.clone(db.consumables[baselineId] ?? []);
   },
-  async upsertConsumables(snapshotId, input) {
-    ensureSnapshotExists(snapshotId);
+  async upsertConsumables(baselineId, input) {
+    ensureBaselineExists(baselineId);
     localDB.mutate(db => {
-      db.consumables[snapshotId] = input.map(entry => ({ ...entry }));
+      db.consumables[baselineId] = input.map(entry => ({ ...entry }));
     });
   },
 };
 
 const procedureDataService: ProcedureDataService = {
-  async listProcedures(snapshotId) {
-    ensureSnapshotExists(snapshotId);
-    const definitions = listProceduresInternal(snapshotId);
+  async listProcedures(baselineId) {
+    ensureBaselineExists(baselineId);
+    const definitions = listProceduresInternal(baselineId);
     return definitions.map(buildProcedureSummary);
   },
-  async createProcedure(snapshotId: string, input: ProcedureDefinitionInput) {
-    ensureSnapshotExists(snapshotId);
+  async createProcedure(baselineId: string, input: ProcedureDefinitionInput) {
+    ensureBaselineExists(baselineId);
     return localDB.mutate(db => {
-      const definitions = db.procedures[snapshotId] ?? [];
+      const definitions = db.procedures[baselineId] ?? [];
       const newId = input.procedureId ?? localDB.generateId();
       if (definitions.some(def => def.id === newId)) {
         throw new Error(`Procedure(${newId}) already exists.`);
@@ -407,14 +407,14 @@ const procedureDataService: ProcedureDataService = {
           equipmentLinks: variant.equipmentLinks.map(entry => ({ ...entry })),
         })),
       };
-      db.procedures[snapshotId] = [...definitions, stored];
+      db.procedures[baselineId] = [...definitions, stored];
       return buildProcedureSummary(stored);
     });
   },
-  async updateProcedureVariant(snapshotId: string, variantId: string, input: ProcedureVariantInput) {
-    ensureSnapshotExists(snapshotId);
+  async updateProcedureVariant(baselineId: string, variantId: string, input: ProcedureVariantInput) {
+    ensureBaselineExists(baselineId);
     return localDB.mutate(db => {
-      const definitions = db.procedures[snapshotId] ?? [];
+      const definitions = db.procedures[baselineId] ?? [];
       const definition = definitions.find(def => def.variants.some(v => v.id === variantId));
       if (!definition) {
         throw new Error(`Variant(${variantId}) not found.`);
@@ -431,10 +431,10 @@ const procedureDataService: ProcedureDataService = {
       return buildProcedureSummary(definition);
     });
   },
-  async deleteProcedureVariant(snapshotId: string, variantId: string) {
-    ensureSnapshotExists(snapshotId);
+  async deleteProcedureVariant(baselineId: string, variantId: string) {
+    ensureBaselineExists(baselineId);
     localDB.mutate(db => {
-      const definitions = db.procedures[snapshotId] ?? [];
+      const definitions = db.procedures[baselineId] ?? [];
       const definitionIndex = definitions.findIndex(def => def.variants.some(v => v.id === variantId));
       if (definitionIndex === -1) {
         throw new Error(`Variant(${variantId}) not found.`);
@@ -447,8 +447,8 @@ const procedureDataService: ProcedureDataService = {
       if (definition.variants.length === 0) {
         definitions.splice(definitionIndex, 1);
       }
-      db.procedures[snapshotId] = definitions;
-      const existingResults = db.results[snapshotId];
+      db.procedures[baselineId] = definitions;
+      const existingResults = db.results[baselineId];
       if (existingResults) {
         existingResults.rows = existingResults.rows.filter(
           row => !(row.procedureName === procedureName && row.variantName === variantLabel)
@@ -459,35 +459,35 @@ const procedureDataService: ProcedureDataService = {
 };
 
 const calculationService: CostingCalculationService = {
-  async recalculate(snapshotId: string): Promise<RecalculateResponse> {
-    const snapshot = ensureSnapshotExists(snapshotId);
+  async recalculate(baselineId: string): Promise<RecalculateResponse> {
+    const baseline = ensureBaselineExists(baselineId);
     const db = localDB.load();
-    const staff = db.staff[snapshotId] ?? [];
-    const consumables = db.consumables[snapshotId] ?? [];
-    const procedures = db.procedures[snapshotId] ?? [];
+    const staff = db.staff[baselineId] ?? [];
+    const consumables = db.consumables[baselineId] ?? [];
+    const procedures = db.procedures[baselineId] ?? [];
 
-    const { rows, insights } = calculateResults(snapshotId, snapshot, staff, consumables, procedures);
+    const { rows, insights } = calculateResults(baselineId, baseline, staff, consumables, procedures);
     const queuedAt = localDB.now();
     const completedAt = queuedAt;
 
     localDB.mutate(mutDB => {
-      mutDB.results[snapshotId] = {
+      mutDB.results[baselineId] = {
         rows: rows.map(row => ({ ...row, costBreakdown: { ...row.costBreakdown } })),
         insights: { ...insights },
         lastCalculatedAt: completedAt,
       };
-      const targetSnapshot = mutDB.snapshots[snapshotId];
-      if (targetSnapshot) {
-        targetSnapshot.lastCalculatedAt = completedAt;
-        if (targetSnapshot.status === 'DRAFT') {
-          targetSnapshot.status = 'READY';
+      const targetBaseline = mutDB.baselines[baselineId];
+      if (targetBaseline) {
+        targetBaseline.lastCalculatedAt = completedAt;
+        if (targetBaseline.status === 'DRAFT') {
+          targetBaseline.status = 'READY';
         }
-        targetSnapshot.updatedAt = completedAt;
+        targetBaseline.updatedAt = completedAt;
       }
       const jobId = localDB.generateId();
       mutDB.jobs[jobId] = {
         jobId,
-        snapshotId,
+        baselineId,
         status: 'COMPLETED',
         queuedAt,
         completedAt,
@@ -500,10 +500,10 @@ const calculationService: CostingCalculationService = {
       completedAt,
     };
   },
-  async getResults(snapshotId, params) {
-    ensureSnapshotExists(snapshotId);
+  async getResults(baselineId, params) {
+    ensureBaselineExists(baselineId);
     const db = localDB.load();
-    const stored = db.results[snapshotId];
+    const stored = db.results[baselineId];
     if (!stored) {
       return [];
     }
@@ -527,18 +527,18 @@ const calculationService: CostingCalculationService = {
     }
     return rows;
   },
-  async getInsights(snapshotId) {
-    ensureSnapshotExists(snapshotId);
+  async getInsights(baselineId) {
+    ensureBaselineExists(baselineId);
     const db = localDB.load();
-    const stored = db.results[snapshotId];
+    const stored = db.results[baselineId];
     if (!stored) {
       return {};
     }
     return localDB.clone(stored.insights);
   },
-  async exportResults(snapshotId, format) {
-    ensureSnapshotExists(snapshotId);
-    const rows = await calculationService.getResults(snapshotId);
+  async exportResults(baselineId, format) {
+    ensureBaselineExists(baselineId);
+    const rows = await calculationService.getResults(baselineId);
     const header = ['Procedure', 'Variant', 'Cases', 'Sale Price', 'Total Cost', 'Margin', 'Margin Rate'];
     const body = rows
       .map(row => [
@@ -560,7 +560,7 @@ const calculationService: CostingCalculationService = {
 };
 
 export const createLocalCostingServices = (): CostingServicesBundle => ({
-  snapshotService,
+  baselineService,
   fixedCostLinkService,
   staffDataService,
   consumableDataService,

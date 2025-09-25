@@ -1,7 +1,7 @@
 ﻿import { CostingServicesBundle } from '../factory';
 import {
   CostingCalculationService,
-  CostingSnapshotService,
+  CostingBaselineService,
   FixedCostLinkService,
   StaffDataService,
   ConsumableDataService,
@@ -12,82 +12,89 @@ const notImplementedAsync = async (method: string): Promise<never> => {
   throw new Error(`[Costing] Supabase backend stub for "${method}" is not implemented yet.`);
 };
 
-const snapshotService: CostingSnapshotService = {
-  async listSnapshots() {
-    return notImplementedAsync('listSnapshots');
+const baselineService: CostingBaselineService = {
+  async listBaselines() {
+    return notImplementedAsync('listBaselines');
   },
-  async getSnapshot(id) {
-    return notImplementedAsync(`getSnapshot(${id})`);
+  async getBaseline(id) {
+    return notImplementedAsync(`getBaseline(${id})`);
   },
-  async createSnapshot(payload) {
-    return notImplementedAsync('createSnapshot');
+  async createBaseline(payload) {
+    return notImplementedAsync('createBaseline');
   },
-  async updateSnapshot(id, payload) {
-    return notImplementedAsync(`updateSnapshot(${id})`);
+  async updateBaseline(id, payload) {
+    return notImplementedAsync(`updateBaseline(${id})`);
   },
-  async lockSnapshot(id) {
-    return notImplementedAsync(`lockSnapshot(${id})`);
+  async lockBaseline(id) {
+    return notImplementedAsync(`lockBaseline(${id})`);
   },
-  async unlockSnapshot(id) {
-    return notImplementedAsync(`unlockSnapshot(${id})`);
+  async unlockBaseline(id) {
+    return notImplementedAsync(`unlockBaseline(${id})`);
   },
 };
 
 const fixedCostLinkService: FixedCostLinkService = {
-  async getSelection(snapshotId) {
-    return notImplementedAsync(`getSelection(${snapshotId})`);
+  async getSelection(baselineId) {
+    return notImplementedAsync(`getSelection(${baselineId})`);
   },
-  async updateSelection(snapshotId, payload) {
-    return notImplementedAsync(`updateSelection(${snapshotId})`);
-  },
-};
-
-const staffDataService: StaffDataService = {\n  async getStaff(snapshotId) {\n    return notImplementedAsync(getStaff());\n  },\n  async upsertStaff(snapshotId, input) {
-    return notImplementedAsync(`upsertStaff(${snapshotId})`);
+  async updateSelection(baselineId, payload) {
+    return notImplementedAsync(`updateSelection(${baselineId})`);
   },
 };
 
-const consumableDataService: ConsumableDataService = {\n  async getConsumables(snapshotId) {\n    return notImplementedAsync(getConsumables());\n  },\n  async upsertConsumables(snapshotId, input) {
-    return notImplementedAsync(`upsertConsumables(${snapshotId})`);
+const staffDataService: StaffDataService = {
+  async getStaff(baselineId) {
+    return notImplementedAsync(`getStaff(${baselineId})`);
+  },
+  async upsertStaff(baselineId, input) {
+    return notImplementedAsync(`upsertStaff(${baselineId})`);
+  },
+};
+
+const consumableDataService: ConsumableDataService = {
+  async getConsumables(baselineId) {
+    return notImplementedAsync(`getConsumables(${baselineId})`);
+  },
+  async upsertConsumables(baselineId, input) {
+    return notImplementedAsync(`upsertConsumables(${baselineId})`);
   },
 };
 
 const procedureDataService: ProcedureDataService = {
-  async listProcedures(snapshotId) {
-    return notImplementedAsync(`listProcedures(${snapshotId})`);
+  async listProcedures(baselineId) {
+    return notImplementedAsync(`listProcedures(${baselineId})`);
   },
-  async createProcedure(snapshotId, input) {
-    return notImplementedAsync(`createProcedure(${snapshotId})`);
+  async createProcedure(baselineId, input) {
+    return notImplementedAsync(`createProcedure(${baselineId})`);
   },
-  async updateProcedureVariant(snapshotId, variantId, input) {
-    return notImplementedAsync(`updateProcedureVariant(${snapshotId}, ${variantId})`);
+  async updateProcedureVariant(baselineId, variantId, input) {
+    return notImplementedAsync(`updateProcedureVariant(${baselineId}, ${variantId})`);
   },
-  async deleteProcedureVariant(snapshotId, variantId) {
-    return notImplementedAsync(`deleteProcedureVariant(${snapshotId}, ${variantId})`);
+  async deleteProcedureVariant(baselineId, variantId) {
+    return notImplementedAsync(`deleteProcedureVariant(${baselineId}, ${variantId})`);
   },
 };
 
 const calculationService: CostingCalculationService = {
-  async recalculate(snapshotId) {
-    return notImplementedAsync(`recalculate(${snapshotId})`);
+  async recalculate(baselineId) {
+    return notImplementedAsync(`recalculate(${baselineId})`);
   },
-  async getResults(snapshotId, params) {
-    return notImplementedAsync(`getResults(${snapshotId})`);
+  async getResults(baselineId, params) {
+    return notImplementedAsync(`getResults(${baselineId})`);
   },
-  async getInsights(snapshotId) {
-    return notImplementedAsync(`getInsights(${snapshotId})`);
+  async getInsights(baselineId) {
+    return notImplementedAsync(`getInsights(${baselineId})`);
   },
-  async exportResults(snapshotId, format) {
-    return notImplementedAsync(`exportResults(${snapshotId}, ${format})`);
+  async exportResults(baselineId, format) {
+    return notImplementedAsync(`exportResults(${baselineId}, ${format})`);
   },
 };
 
 export const createSupabaseCostingServices = (): CostingServicesBundle => ({
-  snapshotService,
+  baselineService,
   fixedCostLinkService,
   staffDataService,
   consumableDataService,
   procedureDataService,
   calculationService,
 });
-

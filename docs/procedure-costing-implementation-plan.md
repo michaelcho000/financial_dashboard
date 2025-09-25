@@ -8,7 +8,7 @@
 ## 추진 원칙
 - **위계 보존**: `/income-statement`, `/account-management`, `fixed-costs` 모듈에 직접적인 변경 없이 `Costing` 모듈을 별도의 네임스페이스로 추가한다.
 - **UI 재사용**: 테이블, 탭, 토스트 등 기존 컴포넌트를 최대한 재활용하고 필요한 경우 스타일 토큰 범위 내에서만 커스터마이즈한다.
-- **기술부채 최소화**: 서비스 계층 인터페이스(`CostingSnapshotService`, `CostingCalculationService`, `FixedCostLinkService`)를 분리해 Supabase 전환 시 어댑터만 교체하도록 설계한다.
+- **기술부채 최소화**: 서비스 계층 인터페이스(`CostingBaselineService`, `CostingCalculationService`, `FixedCostLinkService`)를 분리해 Supabase 전환 시 어댑터만 교체하도록 설계한다.
 - **데이터 무결성**: 기준월 상태(초안/확정/락)와 고정비 선택 정보를 서버가 단일 출처로 관리하며, UI는 상태를 명확히 표시한다.
 - **UX 일관성**: 더티 상태 경고, 저장 성공 토스트, 탭 이동 패턴 등 기존 화면과 동일한 사용자 흐름을 유지한다.
 
@@ -18,7 +18,7 @@
    - `fixed-costs` 서비스·UI 의존성 조사, 재사용 가능한 컴포넌트 카탈로그 작성.
    - 기준월 상태/락 정책, 고정비 선택 UX, 서비스 인터페이스 문서화.
 2. **Phase 1 · Schema & Service Contract**
-   - DB 마이그레이션 초안 작성(`month_snapshot`, `snapshot_fixed_cost_link`, `staff_capacity`, `consumable_price`, `procedure_variant` 등).
+   - DB 마이그레이션 초안 작성(`month_baseline`, `baseline_fixed_cost_link`, `staff_capacity`, `consumable_price`, `procedure_variant` 등).
    - REST API 계약(요청/응답 포맷, 에러 코드)과 롤백 전략 수립.
    - 고정비 선택 토글/체크 상태 저장 규칙 정의.
 3. **Phase 2 · Base Settings UI**

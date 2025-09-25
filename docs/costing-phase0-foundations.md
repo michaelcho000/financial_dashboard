@@ -24,49 +24,49 @@
 ```
 Draft (기본)
   └─ saveBaseline() → Ready
-  └─ lockSnapshot() → Locked
+  └─ lockBaseline() → Locked
 Locked
   └─ unlock(admin-only) → Draft (재계산 강제)
 Ready
   └─ recalc() → Ready (결과 갱신)
-  └─ lockSnapshot() → Locked
+  └─ lockBaseline() → Locked
 ```
-- `month_snapshot` 테이블 주요 컬럼
+- `month_baselines` 테이블 주요 컬럼
   - `status`: `DRAFT | READY | LOCKED`
   - `locked_at`, `locked_by`, `last_calculated_at`
   - `include_fixed_costs` (boolean), `applied_fixed_cost_ids` (JSONB)
 - Locked 상태에서는 `/costing/base` 와 `/costing/procedures` 의 입력 필드를 비활성화하고 `/costing/results` 만 읽기 전용으로 제공한다.
-- 기준월 관련 수정(인력, 소모품, 고정비 선택)은 `snapshot_change_log` 에 기록하여 Phase 6 감사 로그 구현을 대비한다.
+- 기준월 관련 수정(인력, 소모품, 고정비 선택)은 `baseline_change_log` 에 기록하여 Phase 6 감사 로그 구현을 대비한다.
 
 ## 4. 고정비 연동 UX 플로우
 1. 기준월 생성 모달에서 `고정비 반영` 토글을 기본 ON 으로 제공한다.
 2. 토글이 ON 인 경우 활성화된 고정비 템플릿을 체크박스 리스트로 출력하고, 기본값은 `fixed-costs` 모듈의 현재 활성 항목을 따른다.
 3. 체크 상태가 바뀌면 우측 요약 패널에서 선택된 고정비 총합과 주요 항목을 즉시 업데이트한다.
 4. 토글을 OFF 하면 계산 엔진에서 고정비 배분을 생략하도록 표시하고, 결과 화면에도 “고정비 미반영” 배지를 띄운다.
-5. 저장 시 `snapshot_fixed_cost_link` 테이블에 `(snapshot_id, fixed_cost_template_id, include)` 형태로 upsert 한다.
+5. 저장 시 `baseline_fixed_cost_links` 테이블에 `(baseline_id, fixed_cost_template_id, include)` 형태로 upsert 한다.
 6. `재계산` 버튼을 누르면 현재 기준월의 선택 상태를 읽어와 비용 배분을 다시 실행하고 결과 데이터를 갱신한다.
 
 ## 5. 서비스 인터페이스 초안
 ```ts
-interface CostingSnapshotService {
-  listSnapshots(tenantId: string): Promise<SnapshotSummary[]>;
-  createSnapshot(payload: { tenantId: string; month: string; sourceMonth?: string | null; includeFixedCosts: boolean; }): Promise<SnapshotDetail>;
-  updateFixedCostLinks(snapshotId: string, links: FixedCostLinkPayload[]): Promise<void>;
-  updateStaffCapacity(snapshotId: string, input: StaffCapacityInput[]): Promise<void>;
-  updateConsumablePricing(snapshotId: string, input: ConsumablePricingInput[]): Promise<void>;
-  lockSnapshot(snapshotId: string): Promise<void>;
-  unlockSnapshot(snapshotId: string): Promise<void>;
+interface CostingBaselineService {
+  listBaselines(tenantId: string): Promise<BaselineSummary[]>;
+  createBaseline(payload: { tenantId: string; month: string; sourceMonth?: string | null; includeFixedCosts: boolean; }): Promise<BaselineDetail>;
+  updateFixedCostLinks(baselineId: string, links: FixedCostLinkPayload[]): Promise<void>;
+  updateStaffCapacity(baselineId: string, input: StaffCapacityInput[]): Promise<void>;
+  updateConsumablePricing(baselineId: string, input: ConsumablePricingInput[]): Promise<void>;
+  lockBaseline(baselineId: string): Promise<void>;
+  unlockBaseline(baselineId: string): Promise<void>;
 }
 
 interface CostingCalculationService {
-  recalc(snapshotId: string): Promise<CalculationResultSummary>;
-  getResults(snapshotId: string): Promise<CostingResultRow[]>;
-  getInsights(snapshotId: string): Promise<MomInsightPayload>;
+  recalc(baselineId: string): Promise<CalculationResultSummary>;
+  getResults(baselineId: string): Promise<CostingResultRow[]>;
+  getInsights(baselineId: string): Promise<MomInsightPayload>;
 }
 
 interface FixedCostLinkService {
   listAvailableFixedCosts(tenantId: string, month: string): Promise<FixedCostTemplateSummary[]>;
-  resolveDefaultInclusions(snapshotId: string): Promise<FixedCostLinkState>;
+  resolveDefaultInclusions(baselineId: string): Promise<FixedCostLinkState>;
 }
 ```
 - 에러 형식은 `DomainError`(검증 실패), `ConflictError`(락 상태 변경 시도), `NotFoundError` 등을 `src/services/errors.ts` 로 분리해 공통 처리한다.
@@ -140,17 +140,17 @@ interface FixedCostLinkService {
 | 서버 오류 | 계산 엔진 실패 등 | 500 Internal Server Error | 에러 로그 기록, 사용자에게 재시도/지원 안내 |
 ## 10. DB 네이밍 & 마이그레이션 가이드 (Phase 1 준비)
 - **네이밍 규칙**
-  - 테이블/뷰: `snake_case` 복수형 (`month_snapshots`, `procedure_variants`).
-  - 기본 키: `id`(UUID), 관계 컬럼은 `<entity>_id` (`tenant_id`, `snapshot_id`).
+  - 테이블/뷰: `snake_case` 복수형 (`month_baseliness`, `procedure_variants`).
+  - 기본 키: `id`(UUID), 관계 컬럼은 `<entity>_id` (`tenant_id`, `baseline_id`).
   - 타임스탬프: `created_at`, `updated_at`, 상태 전환은 `locked_at`, `last_calculated_at` 등 명시적 이름 사용.
   - 상태 컬럼은 ENUM 대신 `TEXT CHECK` 제약을 우선 적용하여 Supabase 마이그레이션과 호환성을 유지한다.
 - **마이그레이션 파일 구조**
-  - 경로: `db/migrations/<timestamp>_<slug>.sql` (예: `db/migrations/20241012_costing_snapshots.sql`).
+  - 경로: `db/migrations/<timestamp>_<slug>.sql` (예: `db/migrations/20241012_costing_baselines.sql`).
   - 각 파일은 `BEGIN; ... COMMIT;` 블록으로 감싸고, 롤백을 위한 `-- rollback:` 주석에 역쿼리를 병기한다.
   - 기본 데이터 시드가 필요한 경우 `-- seed:` 블록을 별도로 명시하며, 테스트 환경에서는 비워둘 수 있도록 조건 처리.
 - **관계 및 인덱스**
   - 모든 FK는 `ON DELETE CASCADE` 또는 `ON DELETE RESTRICT` 를 명시한다. 기본값은 `CASCADE` 대신 `RESTRICT` 로 설정하고 필요 시 예외를 둔다.
-  - 자주 조회하는 조합(`tenant_id`, `month`, `status`)은 복합 인덱스를 정의하고, 결과 테이블은 `(snapshot_id, procedure_variant_id)` 인덱스를 기본 제공한다.
+  - 자주 조회하는 조합(`tenant_id`, `month`, `status`)은 복합 인덱스를 정의하고, 결과 테이블은 `(baseline_id, procedure_variant_id)` 인덱스를 기본 제공한다.
 - **스크립트 운영**
   - 로컬 개발은 `npm run db:migrate` 스크립트에 새 파일을 추가해 순차 실행하고, CI 환경에서도 동일 스크립트를 활용한다.
   - 마이그레이션 전후로 `npm run build` 를 실행해 타입/서비스 코드가 스키마 변경과 일관된지 검증한다.
