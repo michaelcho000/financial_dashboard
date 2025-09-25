@@ -1,6 +1,7 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Table, TableHead, TableBody, TableRow, TableCell, TableHeader } from '../../components/ui/Table';
 import { useCostingBaselines } from '../../contexts/CostingBaselineContext';
+import { useFinancials } from '../../contexts/FinancialDataContext';
 import { useCostingServices } from '../../contexts/CostingServicesContext';
 import {
   ConsumablePricingInput,
@@ -10,8 +11,6 @@ import {
   FixedCostItemState,
 } from '../../services/costing/types';
 import { formatCurrency } from '../../utils/formatters';
-
-import CostingPlaceholder from './CostingPlaceholder';
 
 interface EditableStaff extends StaffCapacityInput {
   clientId: string;
@@ -42,6 +41,8 @@ const CostingBasePage: React.FC = () => {
     loading,
     error,
   } = useCostingBaselines();
+  const { currentMonths } = useFinancials();
+  const [primaryMonth] = currentMonths;
   const { staffDataService, consumableDataService, fixedCostLinkService, calculationService } =
     useCostingServices();
 
@@ -62,6 +63,13 @@ const CostingBasePage: React.FC = () => {
   const [newMonth, setNewMonth] = useState('');
   const [newIncludeFixed, setNewIncludeFixed] = useState(true);
   const [newSourceBaselineId, setNewSourceBaselineId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!primaryMonth) {
+      return;
+    }
+    setNewMonth(prev => (prev ? prev : primaryMonth));
+  }, [primaryMonth]);
 
   const loadBaselineData = useCallback(async () => {
     if (!selectedBaselineId) {
@@ -832,15 +840,6 @@ const CostingBasePage: React.FC = () => {
     </section>
   );
 
-  if (!baselines.length && !selectedBaseline && !loading) {
-    return (
-      <CostingPlaceholder
-        title="기본 설정"
-        description="기준월을 생성하고 인력/소모품 데이터를 입력해 원가 계산을 준비하세요."
-      />
-    );
-  }
-
   return (
     <div className="space-y-6">
       {renderBaselineControls()}
@@ -853,7 +852,7 @@ const CostingBasePage: React.FC = () => {
         </>
       ) : (
         <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
-          기준월을 선택하면 인력 및 소모품 편집 기능을 사용할 수 있습니다.
+          기준월을 생성하거나 선택하면 인력 및 소모품 편집 기능을 사용할 수 있습니다.
         </div>
       )}
     </div>

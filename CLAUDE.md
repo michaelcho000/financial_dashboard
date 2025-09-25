@@ -16,7 +16,9 @@ This is a React-based financial dashboard application for healthcare facilities 
 
 ### Environment Setup
 - Set `GEMINI_API_KEY` in `.env.local` for AI features (optional)
-- Development server runs on `http://localhost:3000`
+- Set `VITE_FEATURE_COSTING_MODULE=true/false` to enable/disable costing module
+- Set `VITE_COSTING_BACKEND=local/supabase` to configure costing backend
+- Development server runs on `http://localhost:3000` (configured in vite.config.ts)
 
 ### Authentication
 - **Super Admin**: `superadmin` / `adminpass` - Full system access
@@ -76,6 +78,7 @@ The application uses React Context + custom hooks pattern:
 - `/dashboard` - Financial dashboard for selected hospital
 - `/income-statement` - Detailed income statement view
 - `/fixed-costs` - Fixed cost management page
+- `/costing/*` - Procedure costing module (feature flag controlled)
 - `/account-management` - Account configuration for selected hospital
 - `/reports` - Monthly financial reports
 
@@ -135,6 +138,8 @@ The application uses React Context + custom hooks pattern:
 - **Styling**: Tailwind CSS (based on className usage patterns)
 - **Path Aliases**: `@/*` maps to root directory
 - **State Persistence**: LocalStorage-based database
+- **Feature Flags**: Environment-based feature toggles for module enablement
+- **Icons**: Custom SVG icon components (Lucide React)
 
 ## Development Notes
 
@@ -244,3 +249,44 @@ The application supports Korean healthcare terminology and business practices:
 - `financial_app_current_user` - Current user session
 - `financial_app_active_tenant` - Selected hospital
 - `superadmin_selected_hospital` - Super Admin's hospital selection
+
+### Feature Flag System
+**Configuration**: Feature flags are controlled via environment variables and managed in `src/config/featureFlags.ts`.
+
+**Available Flags**:
+- `VITE_FEATURE_COSTING_MODULE` - Enables/disables the procedure costing module
+- `VITE_COSTING_BACKEND` - Configures backend for costing (local/supabase)
+
+**Usage Pattern**:
+- Flags are evaluated at build time and runtime
+- Missing environment variables default to `true` for costing module
+- Components conditionally render based on `featureFlags.costingModule`
+
+**Implementation Example**:
+```tsx
+import { featureFlags } from './config/featureFlags';
+
+{featureFlags.costingModule && (
+    <Route path="costing/*" element={<CostingRouter />} />
+)}
+```
+
+### Costing Module Architecture
+**Purpose**: Procedure-based cost analysis and pricing calculations for healthcare services.
+
+**Key Components**:
+- `CostingRouter` - Nested routing for costing workflows
+- `CostingLayout` - Specialized layout with header integration
+- `CostingServicesContext` - Service layer abstraction
+- `CostingBaselineContext` - Baseline data management
+
+**Service Layers**:
+- **Factory Pattern**: `services/costing/factory.ts` - Service instantiation
+- **Local Storage**: `services/costing/local/` - Client-side persistence
+- **Supabase Integration**: `services/costing/supabase/` - Cloud backend
+- **HTTP Client**: `services/costing/client/httpClient.ts` - API communication
+
+**Integration Points**:
+- Header component includes costing navigation when enabled
+- Month synchronization with main financial dashboard
+- Isolated data contexts for costing-specific state management

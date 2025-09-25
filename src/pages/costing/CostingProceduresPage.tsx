@@ -9,7 +9,6 @@ import {
   ProcedureConsumableUsageInput,
   ProcedureEquipmentLinkInput,
 } from '../../services/costing/types';
-import CostingPlaceholder from './CostingPlaceholder';
 
 const createClientId = () => 'tmp-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now();
 
@@ -386,10 +385,15 @@ const CostingProceduresPage: React.FC = () => {
   };
   if (!selectedBaseline && !baselineLoading) {
     return (
-      <CostingPlaceholder
-        title="시술 설정"
-        description="기준월을 선택하면 시술 마스터를 불러오고 구성 요소를 편집할 수 있습니다."
-      />
+      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">기준월을 먼저 선택하세요</h2>
+        <p className="mt-3 text-sm text-gray-600">
+          상단의 기준월 선택기를 사용하면 해당 월의 시술 마스터 데이터를 불러옵니다.
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          /income-statement에서 해당 월의 재무 데이터를 등록해야 편집이 열립니다.
+        </p>
+      </div>
     );
   }
 
@@ -796,3 +800,4 @@ const CostingProceduresPage: React.FC = () => {
 };
 
 export default CostingProceduresPage;
+

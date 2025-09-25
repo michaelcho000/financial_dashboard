@@ -24,7 +24,8 @@
       "Bash(git config:*)",
       "Bash(git log:*)",
       "Bash(pgrep:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
