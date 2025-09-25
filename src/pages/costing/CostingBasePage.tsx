@@ -7,7 +7,9 @@ import {
   StaffCapacityInput,
   BaselineCreatePayload,
   BaselineStatus,
+  FixedCostItemState,
 } from '../../services/costing/types';
+import { formatCurrency } from '../../utils/formatters';
 
 import CostingPlaceholder from './CostingPlaceholder';
 
@@ -36,17 +38,26 @@ const CostingBasePage: React.FC = () => {
     selectBaseline,
     createBaseline,
     updateBaseline,
+    refreshBaselines,
     loading,
     error,
   } = useCostingBaselines();
-  const { staffDataService, consumableDataService, calculationService } = useCostingServices();
+  const { staffDataService, consumableDataService, fixedCostLinkService, calculationService } =
+    useCostingServices();
 
   const [staffEntries, setStaffEntries] = useState<EditableStaff[]>([]);
   const [consumableEntries, setConsumableEntries] = useState<EditableConsumable[]>([]);
+  const [fixedCostItems, setFixedCostItems] = useState<FixedCostItemState[]>([]);
+  const [fixedCostInclude, setFixedCostInclude] = useState(true);
   const [staffSaving, setStaffSaving] = useState(false);
   const [consumableSaving, setConsumableSaving] = useState(false);
+  const [fixedCostSaving, setFixedCostSaving] = useState(false);
+  const [staffDirty, setStaffDirty] = useState(false);
+  const [consumableDirty, setConsumableDirty] = useState(false);
+  const [fixedCostDirty, setFixedCostDirty] = useState(false);
   const [recalcState, setRecalcState] = useState<'idle' | 'running' | 'done'>('idle');
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'staff' | 'consumables'>('staff');
 
   const [newMonth, setNewMonth] = useState('');
   const [newIncludeFixed, setNewIncludeFixed] = useState(true);
@@ -56,12 +67,15 @@ const CostingBasePage: React.FC = () => {
     if (!selectedBaselineId) {
       setStaffEntries([]);
       setConsumableEntries([]);
+      setFixedCostItems([]);
+      setFixedCostInclude(true);
       return;
     }
     try {
-      const [staff, consumables] = await Promise.all([
+      const [staff, consumables, fixedCosts] = await Promise.all([
         staffDataService.getStaff(selectedBaselineId),
         consumableDataService.getConsumables(selectedBaselineId),
+        fixedCostLinkService.getSelection(selectedBaselineId),
       ]);
       setStaffEntries(
         staff.map(entry => ({
@@ -75,11 +89,21 @@ const CostingBasePage: React.FC = () => {
           ...entry,
         }))
       );
+      setFixedCostItems(fixedCosts.items.map(item => ({ ...item })));
+      setFixedCostInclude(fixedCosts.includeFixedCosts);
+      setStaffDirty(false);
+      setConsumableDirty(false);
+      setFixedCostDirty(false);
     } catch (err) {
       console.error('[Costing] Failed to load staff/consumable data', err);
       setFormMessage('기준월 데이터를 불러오지 못했습니다. 페이지를 새로고침 해주세요.');
     }
-  }, [selectedBaselineId, staffDataService, consumableDataService]);
+  }, [
+    selectedBaselineId,
+    staffDataService,
+    consumableDataService,
+    fixedCostLinkService,
+  ]);
 
   useEffect(() => {
     loadBaselineData();
@@ -118,6 +142,7 @@ const CostingBasePage: React.FC = () => {
           : entry
       )
     );
+    setStaffDirty(true);
   };
 
   const handleConsumableChange = (clientId: string, field: keyof EditableConsumable, value: string) => {
@@ -134,6 +159,7 @@ const CostingBasePage: React.FC = () => {
           : entry
       )
     );
+    setConsumableDirty(true);
   };
 
   const addStaffRow = () => {
@@ -146,10 +172,12 @@ const CostingBasePage: React.FC = () => {
         availableMinutes: 0,
       },
     ]);
+    setStaffDirty(true);
   };
 
   const removeStaffRow = (clientId: string) => {
     setStaffEntries(prev => prev.filter(entry => entry.clientId !== clientId));
+    setStaffDirty(true);
   };
 
   const addConsumableRow = () => {
@@ -163,10 +191,12 @@ const CostingBasePage: React.FC = () => {
         unit: '',
       },
     ]);
+    setConsumableDirty(true);
   };
 
   const removeConsumableRow = (clientId: string) => {
     setConsumableEntries(prev => prev.filter(entry => entry.clientId !== clientId));
+    setConsumableDirty(true);
   };
 
   const handleSaveStaff = async () => {
@@ -182,6 +212,7 @@ const CostingBasePage: React.FC = () => {
         .map(({ clientId, ...rest }) => ({ ...rest }));
       await staffDataService.upsertStaff(selectedBaselineId, payload);
       setFormMessage('인력 설정을 저장했습니다.');
+      setStaffDirty(false);
     } catch (err) {
       console.error('[Costing] Failed to save staff', err);
       setFormMessage(err instanceof Error ? err.message : '인력 설정 저장에 실패했습니다.');
@@ -203,11 +234,65 @@ const CostingBasePage: React.FC = () => {
         .map(({ clientId, ...rest }) => ({ ...rest }));
       await consumableDataService.upsertConsumables(selectedBaselineId, payload);
       setFormMessage('소모품 단가를 저장했습니다.');
+      setConsumableDirty(false);
     } catch (err) {
       console.error('[Costing] Failed to save consumables', err);
       setFormMessage(err instanceof Error ? err.message : '소모품 단가 저장에 실패했습니다.');
     } finally {
       setConsumableSaving(false);
+    }
+  };
+
+  const handleToggleFixedCostInclude = (include: boolean) => {
+    setFixedCostInclude(include);
+    setFixedCostDirty(true);
+  };
+
+  const handleToggleFixedCostItem = (templateId: string) => {
+    setFixedCostItems(prev =>
+      prev.map(item =>
+        item.templateId === templateId ? { ...item, included: !item.included } : item
+      )
+    );
+    setFixedCostDirty(true);
+  };
+
+  const totalSelectedFixedCost = useMemo(() => {
+    if (!fixedCostInclude) {
+      return 0;
+    }
+    return fixedCostItems
+      .filter(item => item.included)
+      .reduce((sum, item) => sum + (item.monthlyCost ?? 0), 0);
+  }, [fixedCostInclude, fixedCostItems]);
+
+  const includedCount = useMemo(() => {
+    if (!fixedCostInclude) {
+      return 0;
+    }
+    return fixedCostItems.filter(item => item.included).length;
+  }, [fixedCostInclude, fixedCostItems]);
+
+  const handleSaveFixedCosts = async () => {
+    if (!selectedBaselineId) {
+      setFormMessage('선택된 기준월이 없습니다.');
+      return;
+    }
+    setFixedCostSaving(true);
+    setFormMessage(null);
+    try {
+      await fixedCostLinkService.updateSelection(selectedBaselineId, {
+        includeFixedCosts: fixedCostInclude,
+        items: fixedCostItems.map(item => ({ ...item })),
+      });
+      await refreshBaselines();
+      setFormMessage('고정비 설정을 저장했습니다.');
+      setFixedCostDirty(false);
+    } catch (err) {
+      console.error('[Costing] Failed to save fixed cost selection', err);
+      setFormMessage(err instanceof Error ? err.message : '고정비 설정 저장에 실패했습니다.');
+    } finally {
+      setFixedCostSaving(false);
     }
   };
 
@@ -232,10 +317,8 @@ const CostingBasePage: React.FC = () => {
 
   useEffect(() => {
     setRecalcState('idle');
-  }, [selectedBaselineId]);
-
-  useEffect(() => {
     setFormMessage(null);
+    setActiveTab('staff');
   }, [selectedBaselineId]);
 
   const selectedStatusLabel: string = useMemo(() => {
@@ -306,7 +389,7 @@ const CostingBasePage: React.FC = () => {
           <label className="text-sm font-medium text-gray-700">선택된 기준월</label>
           <select
             value={selectedBaselineId ?? ''}
-            onChange={event => selectBaseline(event.target.value || null)}
+            onChange={event => handleBaselineSelect(event.target.value || null)}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           >
             <option value="">기준월 선택</option>
@@ -365,21 +448,61 @@ const CostingBasePage: React.FC = () => {
     </section>
   );
 
-  const renderStaffSection = () => (
-    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-      <header className="mb-4 flex items-center justify-between">
+  const baselineLocked = selectedBaseline?.status === 'LOCKED';
+  const hasUnsavedChanges = fixedCostDirty || staffDirty || consumableDirty;
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
+  const confirmNavigationIfDirty = useCallback(() => {
+    if (!hasUnsavedChanges) {
+      return true;
+    }
+    return window.confirm('저장하지 않은 변경사항이 있습니다. 이동하시겠습니까?');
+  }, [hasUnsavedChanges]);
+
+  const handleBaselineSelect = (nextBaselineId: string | null) => {
+    if (nextBaselineId === selectedBaselineId) {
+      return;
+    }
+    if (!confirmNavigationIfDirty()) {
+      return;
+    }
+    selectBaseline(nextBaselineId);
+  };
+
+  const renderStaffContent = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-semibold text-gray-900">인력 설정</h3>
           <p className="text-sm text-gray-500">역할별 월 급여와 가용 시간을 입력하세요.</p>
         </div>
         <button
           type="button"
-          onClick={addStaffRow}
+          onClick={() => {
+            if (baselineLocked) {
+              return;
+            }
+            addStaffRow();
+          }}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100"
+          disabled={baselineLocked}
         >
           행 추가
         </button>
-      </header>
+      </div>
 
       <div className="overflow-x-auto">
         <Table>
@@ -407,6 +530,7 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleStaffChange(entry.clientId, 'roleName', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                     placeholder="예: 간호사"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-right">
@@ -415,6 +539,7 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleStaffChange(entry.clientId, 'monthlyPayroll', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-right"
                     placeholder="0"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-right">
@@ -423,13 +548,20 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleStaffChange(entry.clientId, 'availableMinutes', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-right"
                     placeholder="0"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-center">
                   <button
                     type="button"
-                    onClick={() => removeStaffRow(entry.clientId)}
+                    onClick={() => {
+                      if (baselineLocked) {
+                        return;
+                      }
+                      removeStaffRow(entry.clientId);
+                    }}
                     className="text-sm text-red-500 hover:underline"
+                    disabled={baselineLocked}
                   >
                     삭제
                   </button>
@@ -440,34 +572,40 @@ const CostingBasePage: React.FC = () => {
         </Table>
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={handleSaveStaff}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-          disabled={staffSaving || !selectedBaselineId}
+          disabled={baselineLocked || staffSaving || !selectedBaselineId || !staffDirty}
         >
           {staffSaving ? '저장 중...' : '인력 설정 저장'}
         </button>
       </div>
-    </section>
+    </div>
   );
 
-  const renderConsumableSection = () => (
-    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-      <header className="mb-4 flex items-center justify-between">
+  const renderConsumableContent = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-semibold text-gray-900">소모품 단가</h3>
           <p className="text-sm text-gray-500">구매 단가와 사용 단위를 입력하세요.</p>
         </div>
         <button
           type="button"
-          onClick={addConsumableRow}
+          onClick={() => {
+            if (baselineLocked) {
+              return;
+            }
+            addConsumableRow();
+          }}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100"
+          disabled={baselineLocked}
         >
           행 추가
         </button>
-      </header>
+      </div>
 
       <div className="overflow-x-auto">
         <Table>
@@ -496,6 +634,7 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleConsumableChange(entry.clientId, 'consumableName', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                     placeholder="예: 울쎄라 팁"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-right">
@@ -504,6 +643,7 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleConsumableChange(entry.clientId, 'purchaseCost', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-right"
                     placeholder="0"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-right">
@@ -512,6 +652,7 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleConsumableChange(entry.clientId, 'yieldQuantity', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-right"
                     placeholder="1"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell>
@@ -520,13 +661,20 @@ const CostingBasePage: React.FC = () => {
                     onChange={event => handleConsumableChange(entry.clientId, 'unit', event.target.value)}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                     placeholder="예: shots"
+                    disabled={baselineLocked}
                   />
                 </TableCell>
                 <TableCell className="text-center">
                   <button
                     type="button"
-                    onClick={() => removeConsumableRow(entry.clientId)}
+                    onClick={() => {
+                      if (baselineLocked) {
+                        return;
+                      }
+                      removeConsumableRow(entry.clientId);
+                    }}
                     className="text-sm text-red-500 hover:underline"
+                    disabled={baselineLocked}
                   >
                     삭제
                   </button>
@@ -537,16 +685,150 @@ const CostingBasePage: React.FC = () => {
         </Table>
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={handleSaveConsumables}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-          disabled={consumableSaving || !selectedBaselineId}
+          disabled={baselineLocked || consumableSaving || !selectedBaselineId || !consumableDirty}
         >
           {consumableSaving ? '저장 중...' : '소모품 단가 저장'}
         </button>
       </div>
+    </div>
+  );
+
+  const renderConfigurationTabs = () => {
+    const tabs: { key: 'staff' | 'consumables'; label: string; dirty: boolean }[] = [
+      { key: 'staff', label: '인력 설정', dirty: staffDirty },
+      { key: 'consumables', label: '소모품 단가', dirty: consumableDirty },
+    ];
+
+    return (
+      <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {tabs.map(tab => {
+              const isActive = tab.key === activeTab;
+              const baseTabClasses = 'rounded-md px-3 py-2 text-sm font-medium transition';
+              const tabClasses = isActive
+                ? baseTabClasses + ' bg-blue-600 text-white shadow-sm'
+                : baseTabClasses + ' text-gray-600 hover:text-gray-900 hover:bg-gray-100';
+
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={tabClasses}
+                  aria-pressed={isActive}
+                >
+                  <span>{tab.label}</span>
+                  {tab.dirty && (
+                    <span className="ml-2 inline-flex items-center text-xs font-semibold text-orange-500">
+                      ●<span className="sr-only">저장하지 않은 변경사항</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4">
+          {activeTab === 'staff' ? renderStaffContent() : renderConsumableContent()}
+        </div>
+      </section>
+    );
+  };
+
+  const renderFixedCostSection = () => (
+    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">고정비 반영</h3>
+          <p className="text-sm text-gray-500">
+            반영할 고정비를 선택하고 필요 시 항목별로 포함 여부를 조정하세요.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={fixedCostInclude}
+              onChange={event => handleToggleFixedCostInclude(event.target.checked)}
+              disabled={baselineLocked}
+              className="h-4 w-4"
+            />
+            고정비 반영
+          </label>
+          <div className="text-sm text-gray-600">
+            선택 {includedCount}개 · 합계 {formatCurrency(totalSelectedFixedCost)}
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveFixedCosts}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            disabled={baselineLocked || fixedCostSaving || !selectedBaselineId || !fixedCostDirty}
+          >
+            {fixedCostSaving ? '저장 중...' : '고정비 설정 저장'}
+          </button>
+        </div>
+      </header>
+
+      {!fixedCostItems.length ? (
+        <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
+          등록된 고정비 항목이 없습니다. 고정비 모듈에서 항목을 추가하면 이곳에서 선택할 수 있습니다.
+        </div>
+      ) : (
+        <div className={`overflow-x-auto ${!fixedCostInclude ? 'opacity-60' : ''}`}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-32 text-center">반영</TableHead>
+                <TableHead>항목명</TableHead>
+                <TableHead className="w-40 text-right">월 비용 (원)</TableHead>
+                <TableHead className="w-32 text-center">기본값</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {fixedCostItems.map(item => (
+                <TableRow key={item.templateId}>
+                  <TableCell className="text-center">
+                    <input
+                      type="checkbox"
+                      checked={item.included && fixedCostInclude}
+                      onChange={() => handleToggleFixedCostItem(item.templateId)}
+                      disabled={baselineLocked || !fixedCostInclude}
+                      className="h-4 w-4"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900">{item.name}</span>
+                      <span className="text-xs text-gray-500">템플릿 ID: {item.templateId}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.monthlyCost)}</TableCell>
+                  <TableCell className="text-center">
+                    {item.defaultIncluded ? '기본 포함' : '선택'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {baselineLocked && (
+        <p className="mt-4 rounded-md bg-yellow-50 px-4 py-3 text-sm text-yellow-700">
+          기준월이 잠금 상태입니다. 고정비 선택을 변경하려면 먼저 잠금을 해제하세요.
+        </p>
+      )}
+      {!fixedCostInclude && fixedCostItems.length > 0 && (
+        <p className="mt-4 rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          고정비 반영이 비활성화되어 있어 이번 기준월 계산에서는 고정비가 제외됩니다.
+        </p>
+      )}
     </section>
   );
 
@@ -566,8 +848,8 @@ const CostingBasePage: React.FC = () => {
       {formMessage && <div className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{formMessage}</div>}
       {selectedBaseline ? (
         <>
-          {renderStaffSection()}
-          {renderConsumableSection()}
+          {renderFixedCostSection()}
+          {renderConfigurationTabs()}
         </>
       ) : (
         <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">

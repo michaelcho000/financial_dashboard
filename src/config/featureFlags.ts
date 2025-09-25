@@ -25,8 +25,16 @@ const parseBoolean = (value: string | boolean | undefined): boolean => {
   return false;
 };
 
+const resolveCostingModuleFlag = (): boolean => {
+  const raw = env.VITE_FEATURE_COSTING_MODULE;
+  if (typeof raw === 'undefined' || raw === null) {
+    return true;
+  }
+  return parseBoolean(raw);
+};
+
 export const featureFlags = {
-  costingModule: parseBoolean(env.VITE_FEATURE_COSTING_MODULE) || false,
+  costingModule: resolveCostingModuleFlag(),
 } as const;
 
 export type FeatureFlags = typeof featureFlags;
