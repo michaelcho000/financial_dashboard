@@ -1,37 +1,22 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- src/ holds all TypeScript/React code. Key subfolders include components/, contexts/, layouts/, pages/, services/, and hooks/; shared types live in src/types.ts.
-- index.html at the repo root is the Vite entry point; build artefacts output to dist/.
-- .env.local documents required environment keys; do not commit secrets.
+This Vite-powered React app stores all runtime code in `src/`, with feature components under `components/`, state providers in `contexts/`, page-level views in `pages/`, hooks in `hooks/`, and reusable layouts and services in their namesake folders. Shared domain types belong in `src/types.ts`. Build artefacts publish to `dist/`; never edit files there. The root `index.html` bootstraps the client, and `.env.local` records required environment variables for local work.
 
 ## Build, Test, and Development Commands
-- 
-pm install ? install workspace dependencies.
-- 
-pm run dev ? start the Vite dev server on port 3000 for local previewing.
-- 
-pm run build ? run TypeScript checks and create a production bundle in dist/.
-- 
-pm run preview ? serve the latest production build locally.
+- `npm install` - install workspace dependencies before the first run or when packages change.
+- `npm run dev` - launch the Vite dev server on http://localhost:3000 with hot module reload.
+- `npm run build` - run TypeScript checks and create an optimized bundle inside `dist/`.
+- `npm run preview` - serve the latest production build to verify release-ready behaviour.
 
 ## Coding Style & Naming Conventions
-- Use functional React components with hooks; files are written in TypeScript (TS/TSX).
-- Follow existing formatting: 2-space indentation, single quotes in source, double quotes in JSON.
-- Components use PascalCase filenames (e.g., SettingsPage.tsx); hooks use camelCase with a use prefix; singleton services use PascalCase (e.g., DatabaseService).
+Use TypeScript throughout; prefer functional React components and hooks over classes. Follow the existing formatting: two-space indentation, single quotes in source files, and double quotes in JSON. Name components with PascalCase (e.g., `SettingsPage.tsx`), hooks with a `use`-prefixed camelCase name, and singleton services in PascalCase (e.g., `DatabaseService`). Leverage TypeScript types for API surfaces and keep side effects inside services or dedicated hooks.
 
 ## Testing Guidelines
-- Automated tests are not configured. If you add tests, co-locate them beside the source (ComponentName.test.tsx) and document the command to run them.
-- For manual QA run 
-pm run build followed by 
-pm run preview to verify production output.
+Automated tests are not yet configured. When adding tests, colocate them beside the source file as `ComponentName.test.tsx` and document the command needed to execute them. For manual QA before a release, run `npm run build` to ensure type safety and bundling succeed, then `npm run preview` to verify user flows against the production bundle.
 
 ## Commit & Pull Request Guidelines
-- Write imperative, descriptive commit messages (Add tenant template defaults). Keep each commit focused.
-- Pull requests should include a concise summary, testing evidence (commands run), affected UI screenshots/GIFs when relevant, and linked issue IDs.
-- Update docs (README.md, AGENTS.md, configuration notes) whenever build steps, environment variables, or developer workflows change.
+Write focused, imperative commit messages such as `Add tenant template defaults`. Each change should target a single concern. Pull requests must include a succinct summary, commands executed for validation, screenshots or GIFs for UI updates, and links to related issues. Update docs - `README.md`, `AGENTS.md`, or configuration notes - whenever workflows, environment variables, or scripts change.
 
 ## Security & Configuration Tips
-- Store API keys (e.g., GEMINI_API_KEY) in .env.local; never commit secrets.
-- When modifying DatabaseService or settings templates, ensure migrations preserve existing tenant data and validate with a fresh 
-pm run build.
+Keep API keys and secrets (e.g., `GEMINI_API_KEY`) inside `.env.local`; do not commit that file. When touching data workflows such as `DatabaseService` or template defaults, ensure migrations preserve tenant data and rerun `npm run build` afterward to validate the bundle.

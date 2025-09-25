@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a React-based financial dashboard application for healthcare facilities (hospitals and clinics) to manage income statements and financial data. Built with TypeScript, React 19 RC, and Vite. The application features multi-tenancy support, centralized template management, and comprehensive financial tracking for Korean healthcare businesses.
+This is a React-based financial dashboard application for healthcare facilities (hospitals and clinics) to manage income statements and financial data. Built with TypeScript, React 18, and Vite. The application features multi-tenancy support, centralized template management, and comprehensive financial tracking for Korean healthcare businesses.
 
 ## Development Commands
 
@@ -44,6 +44,7 @@ The application follows a component-based React architecture with multi-tenancy 
 - `hooks/` - Custom React hooks for business logic
 - `types.ts` - TypeScript type definitions for the entire application
 - `utils/` - Utility functions and helpers
+- `services/` - Database service layer
 
 ### State Management Pattern
 The application uses React Context + custom hooks pattern:
@@ -53,7 +54,8 @@ The application uses React Context + custom hooks pattern:
 - Current months selection managed separately for UI state
 
 ### Core Data Types
-- **Account** - Financial account with category (REVENUE, COGS, SGA_FIXED, SGA_VARIABLE)
+- **Account** - Financial account with category (REVENUE, EXPENSE)
+  - `costBehavior?: 'fixed' | 'variable'` - Only for expense accounts
   - `isTemporary?: boolean` - Marks accounts added for specific months only
   - `isArchived?: boolean` - Preserves deleted accounts with existing data
 - **Transaction** - Individual transaction records
@@ -94,7 +96,7 @@ The application uses React Context + custom hooks pattern:
 ## Key Features
 
 ### Financial Data Management
-- Account categorization (Revenue, COGS, SGA Fixed/Variable)
+- Account categorization (Revenue, Expense with variable/fixed cost behavior)
 - Manual data entry and transaction-based tracking
 - Fixed cost management with asset finance vs operating service distinction
 - Monthly data aggregation and calculations
@@ -126,12 +128,13 @@ The application uses React Context + custom hooks pattern:
 
 ## Technology Stack
 
-- **Frontend**: React 19 RC with TypeScript
+- **Frontend**: React 18 with TypeScript
 - **Build Tool**: Vite with React plugin
 - **Routing**: React Router DOM v6
 - **Charts**: Recharts for data visualization
 - **Styling**: Tailwind CSS (based on className usage patterns)
 - **Path Aliases**: `@/*` maps to root directory
+- **State Persistence**: LocalStorage-based database
 
 ## Development Notes
 
@@ -223,3 +226,21 @@ The application supports Korean healthcare terminology and business practices:
 - Templates linked to SGA_FIXED accounts via `accountId`
 - UI provides asset finance vs operating service categorization
 - Payment date selection with day-of-month picker interface
+
+### Data Migration System
+**Purpose**: Safely upgrade data structures while preserving hospital customizations.
+
+**Migration Strategy:**
+- Schema version changes trigger full database migration
+- Template version changes only affect new hospitals
+- Existing hospital data preserved during migrations
+- Backup system creates recovery points before migrations
+- `runManualMigration()` available for Super Admin manual triggers
+
+### LocalStorage Database Architecture
+**Storage Keys:**
+- `financial_app_db` - Main database
+- `financial_app_db_schema_version` - Schema version tracking
+- `financial_app_current_user` - Current user session
+- `financial_app_active_tenant` - Selected hospital
+- `superadmin_selected_hospital` - Super Admin's hospital selection
