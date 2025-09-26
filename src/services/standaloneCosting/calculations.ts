@@ -57,14 +57,17 @@ export const calculateMonthlyFixedTotal = (fixedCosts: FixedCostItem[], group?: 
 export const summarizeFixedCosts = (fixedCosts: FixedCostItem[]): {
   facilityTotal: number;
   commonTotal: number;
+  marketingTotal: number;
   total: number;
 } => {
   const facilityTotal = calculateMonthlyFixedTotal(fixedCosts, 'facility');
   const commonTotal = calculateMonthlyFixedTotal(fixedCosts, 'common');
+  const marketingTotal = calculateMonthlyFixedTotal(fixedCosts, 'marketing');
   return {
     facilityTotal,
     commonTotal,
-    total: facilityTotal + commonTotal,
+    marketingTotal,
+    total: facilityTotal + commonTotal + marketingTotal,
   };
 };
 
@@ -125,3 +128,4 @@ export const buildAllBreakdowns = (procedures: ProcedureFormValues[], context: {
 }): ProcedureCostBreakdown[] => {
   return procedures.map(procedure => buildProcedureBreakdown(procedure, context));
 };
+

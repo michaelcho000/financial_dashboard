@@ -15,7 +15,7 @@ const ProcedureResultsSection: React.FC = () => {
     [state.breakdowns, state.procedures],
   );
 
-  const { facilityTotal, commonTotal } = useMemo(
+  const { facilityTotal, commonTotal, marketingTotal } = useMemo(
     () => summarizeFixedCosts(state.fixedCosts),
     [state.fixedCosts],
   );
@@ -57,7 +57,7 @@ const ProcedureResultsSection: React.FC = () => {
         <p className="mt-1 text-sm text-gray-600">시술별 원가, 마진율, 손익분기 건수를 확인합니다.</p>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
           <p className="text-xs font-semibold text-gray-500">월 시설·운영비</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(facilityTotal)}</p>
@@ -66,7 +66,12 @@ const ProcedureResultsSection: React.FC = () => {
         <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
           <p className="text-xs font-semibold text-gray-500">월 공통비용</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(commonTotal)}</p>
-          <p className="mt-1 text-xs text-gray-500">시나리오/마케팅 탭에서 증감하며 검토합니다.</p>
+          <p className="mt-1 text-xs text-gray-500">시나리오 탭에서 손익을 검토합니다.</p>
+        </div>
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
+          <p className="text-xs font-semibold text-gray-500">월 마케팅 비용</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(marketingTotal)}</p>
+          <p className="mt-1 text-xs text-gray-500">인사이트 탭에서 증감 시뮬레이션을 진행합니다.</p>
         </div>
         <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
           <p className="text-xs font-semibold text-gray-500">평균 마진율</p>
@@ -141,3 +146,5 @@ const ProcedureResultsSection: React.FC = () => {
 };
 
 export default ProcedureResultsSection;
+
+

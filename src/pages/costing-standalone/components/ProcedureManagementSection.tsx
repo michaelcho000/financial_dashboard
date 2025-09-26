@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { buildProcedureBreakdown, calculateMonthlyFixedTotal } from '../../../services/standaloneCosting/calculations';
 import { MaterialUsage, ProcedureFormValues, StaffAssignment } from '../../../services/standaloneCosting/types';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
@@ -50,6 +50,13 @@ const parsePositive = (value: string): number | null => {
   return numeric;
 };
 
+const normalizeNotes = (value: string | null | undefined): string => {
+  if (!value) {
+    return '';
+  }
+  return value.replace(/\r\n/g, '\n').replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+};
+
 const ProcedureManagementSection: React.FC = () => {
   const { state, upsertProcedure, removeProcedure } = useStandaloneCosting();
   const [form, setForm] = useState<ProcedureFormState>(emptyProcedureForm);
@@ -61,6 +68,18 @@ const ProcedureManagementSection: React.FC = () => {
   const [newMaterialQuantity, setNewMaterialQuantity] = useState<string>('1');
   const [pendingProcedure, setPendingProcedure] = useState<ProcedureFormValues | null>(null);
   const [warnNoMaterial, setWarnNoMaterial] = useState(false);
+
+  useEffect(() => {
+    if (newStaffId && !state.staff.some(candidate => candidate.id === newStaffId)) {
+      setNewStaffId('');
+    }
+  }, [newStaffId, state.staff]);
+
+  useEffect(() => {
+    if (newMaterialId && !state.materials.some(candidate => candidate.id === newMaterialId)) {
+      setNewMaterialId('');
+    }
+  }, [newMaterialId, state.materials]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -153,6 +172,7 @@ const ProcedureManagementSection: React.FC = () => {
 
     const assignments = toAssignments(staffAssignments);
     const materials = toMaterialUsages(materialUsages);
+    const normalizedNotes = normalizeNotes(form.notes).trim();
 
     const payload: ProcedureFormValues = {
       id: form.id ?? generateId(),
@@ -162,7 +182,7 @@ const ProcedureManagementSection: React.FC = () => {
       totalMinutes,
       staffAssignments: assignments,
       materialUsages: materials,
-      notes: form.notes.trim() || undefined,
+      notes: normalizedNotes || undefined,
     };
 
     if (materials.length === 0) {
@@ -181,7 +201,7 @@ const ProcedureManagementSection: React.FC = () => {
       price: String(procedure.price ?? ''),
       treatmentMinutes: String(procedure.treatmentMinutes ?? ''),
       totalMinutes: String(procedure.totalMinutes ?? ''),
-      notes: procedure.notes ?? '',
+      notes: normalizeNotes(procedure.notes),
     });
     setStaffAssignments(procedure.staffAssignments.map(item => ({ staffId: item.staffId, minutes: String(item.minutes) })));
     setMaterialUsages(procedure.materialUsages.map(item => ({ materialId: item.materialId, quantity: String(item.quantity) })));
@@ -201,15 +221,16 @@ const ProcedureManagementSection: React.FC = () => {
     const price = parseNumber(form.price) ?? 0;
     const treatmentMinutes = parseNumber(form.treatmentMinutes) ?? 0;
     const totalMinutes = parseNumber(form.totalMinutes) ?? treatmentMinutes;
+    const normalizedNotes = normalizeNotes(form.notes).trim();
     return {
       id: form.id ?? 'preview',
-      name: form.name.trim() || '誘몃━蹂닿린',
+      name: form.name.trim() || '미리보기 시술',
       price,
       treatmentMinutes,
       totalMinutes,
       staffAssignments: toAssignments(staffAssignments),
       materialUsages: toMaterialUsages(materialUsages),
-      notes: form.notes.trim() || undefined,
+      notes: normalizedNotes || undefined,
     };
   }, [form, staffAssignments, materialUsages]);
 
@@ -294,7 +315,7 @@ const ProcedureManagementSection: React.FC = () => {
           </label>
 
           <label className="md:col-span-2 flex flex-col gap-1 text-sm text-gray-700">
-            硫붾え
+            메모
             <textarea
               name="notes"
               value={form.notes}
@@ -317,7 +338,7 @@ const ProcedureManagementSection: React.FC = () => {
                                 <option value="">인력을 선택하세요</option>
                 {state.staff.map(staff => (
                   <option key={staff.id} value={staff.id}>
-                    {staff.role} 쨌 {staff.name}
+                    {staff.role} - {staff.name}
                   </option>
                 ))}
               </select>

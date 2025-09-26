@@ -3,6 +3,7 @@ import { buildAllBreakdowns } from '../../../services/standaloneCosting/calculat
 import { clearDraft, loadDraft, saveDraft } from '../../../services/standaloneCosting/storage';
 import {
   EquipmentProfile,
+  FixedCostGroup,
   FixedCostItem,
   MaterialItem,
   OperationalConfig,
@@ -40,10 +41,23 @@ const buildInitialState = (): StandaloneCostingState => ({
   lastSavedAt: null,
 });
 
-const normalizeFixedCost = (item: FixedCostItem): FixedCostItem => ({
-  ...item,
-  costGroup: item.costGroup === 'common' ? 'common' : 'facility',
-});
+const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category?: string }): FixedCostItem => {
+  const normalizedGroup: FixedCostGroup =
+    item.costGroup === 'common' || item.costGroup === 'marketing'
+      ? (item.costGroup as FixedCostGroup)
+      : 'facility';
+
+  const parsedAmount = Number((item as { monthlyAmount?: unknown }).monthlyAmount);
+  const monthlyAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+
+  return {
+    id: item.id,
+    name: item.name,
+    monthlyAmount,
+    notes: item.notes,
+    costGroup: normalizedGroup,
+  };
+};
 
 const normalizeFixedCosts = (items: FixedCostItem[]): FixedCostItem[] => items.map(normalizeFixedCost);
 
@@ -192,7 +206,7 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     }
     migrationNoticeRef.current = false;
     const timer = window.setTimeout(() => {
-      window.alert('湲곗〈 怨좎젙鍮???ぉ???쒖꽕쨌?댁쁺鍮꾨줈 遺꾨쪟?섏뿀?듬땲?? ?꾩슂 ??怨듯넻鍮꾩슜?쇰줈 ?대룞?섏꽭??');
+      window.alert('기존 고정비가 시설·운영비 기준으로 불러와졌습니다. 필요하면 공통비용이나 마케팅 비용으로 재분류해 주세요.');
     }, 0);
     return () => window.clearTimeout(timer);
   }, [hydrated]);
@@ -305,6 +319,10 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
+
+
+
+
 
 
 

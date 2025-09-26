@@ -1,7 +1,7 @@
-﻿import { FixedCostItem, StandaloneCostingDraft, StandaloneCostingState } from './types';
+﻿import { FixedCostGroup, FixedCostItem, StandaloneCostingDraft, StandaloneCostingState } from './types';
 
 const STORAGE_KEY = 'standaloneCosting.v1';
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -12,10 +12,23 @@ export interface LoadedDraftResult {
 
 type PartialState = Partial<StandaloneCostingState>;
 
-const normalizeFixedCost = (item: FixedCostItem): FixedCostItem => ({
-  ...item,
-  costGroup: item.costGroup === 'common' ? 'common' : 'facility',
-});
+const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category?: string }): FixedCostItem => {
+  const normalizedGroup: FixedCostGroup =
+    item.costGroup === 'common' || item.costGroup === 'marketing'
+      ? (item.costGroup as FixedCostGroup)
+      : 'facility';
+
+  const parsedAmount = Number((item as { monthlyAmount?: unknown }).monthlyAmount);
+  const monthlyAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+
+  return {
+    id: item.id,
+    name: item.name,
+    monthlyAmount,
+    notes: item.notes,
+    costGroup: normalizedGroup,
+  };
+};
 
 const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
   operational: state.operational ?? { operatingDays: null, operatingHoursPerDay: null, notes: undefined },
@@ -114,3 +127,5 @@ export const clearDraft = (): void => {
     console.error('[StandaloneCosting] Failed to clear draft', error);
   }
 };
+
+

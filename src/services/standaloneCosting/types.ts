@@ -40,14 +40,13 @@ export interface MaterialUsage {
   quantity: number; // usage expressed in unitLabel
 }
 
-export type FixedCostGroup = 'facility' | 'common';
+export type FixedCostGroup = 'facility' | 'common' | 'marketing';
 
 export interface FixedCostItem {
   id: string;
   name: string;
   monthlyAmount: number;
   costGroup: FixedCostGroup;
-  category?: string;
   notes?: string;
 }
 
@@ -89,3 +88,4 @@ export interface StandaloneCostingDraft {
   state: StandaloneCostingState;
   version: number;
 }
+

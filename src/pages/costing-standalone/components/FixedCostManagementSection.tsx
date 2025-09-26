@@ -9,21 +9,27 @@ interface FixedCostFormState {
   id: string | null;
   name: string;
   monthlyAmount: string;
-  category: string;
   notes: string;
   costGroup: FixedCostGroup;
 }
 
+const GROUP_ORDER: FixedCostGroup[] = ['facility', 'common', 'marketing'];
+
 const GROUP_CONFIG: Record<FixedCostGroup, { label: string; description: string; examples: string[] }> = {
   facility: {
     label: '시설·운영비',
-    description: '영업시간에 비례해 시술 원가에 분배되는 항목입니다.',
+    description: '영업시간에 비례해 시술 원가에 배분되는 항목입니다.',
     examples: ['임대료', '관리비', '장비 리스료', '전기·수도'],
   },
   common: {
     label: '공통비용',
-    description: '시간과 무관하게 발생하며 시나리오 분석에서 커버해야 할 항목입니다.',
-    examples: ['마케팅비', '보험료', '카드 수수료', 'CRM 사용료'],
+    description: '시간과 무관하게 발생하며 손익 시나리오에서 커버해야 할 항목입니다.',
+    examples: ['보험료', '카드 수수료', 'CRM 사용료', '회계·노무 비용'],
+  },
+  marketing: {
+    label: '마케팅 비용',
+    description: '시나리오/인사이트 탭에서 조정되는 마케팅 지출입니다.',
+    examples: ['디지털 광고', '오프라인 광고', '프로모션 이벤트'],
   },
 };
 
@@ -31,7 +37,6 @@ const emptyFixedCostForm: FixedCostFormState = {
   id: null,
   name: '',
   monthlyAmount: '',
-  category: '',
   notes: '',
   costGroup: 'facility',
 };
@@ -49,18 +54,20 @@ const FixedCostManagementSection: React.FC = () => {
   const [form, setForm] = useState<FixedCostFormState>(emptyFixedCostForm);
   const [activeGroup, setActiveGroup] = useState<FixedCostGroup>('facility');
 
-  const { facilityTotal, commonTotal, total } = useMemo(
+  const { facilityTotal, commonTotal, marketingTotal, total } = useMemo(
     () => summarizeFixedCosts(state.fixedCosts),
     [state.fixedCosts],
   );
 
-  const groupItems = useMemo(
-    () => ({
-      facility: state.fixedCosts.filter(item => item.costGroup === 'facility'),
-      common: state.fixedCosts.filter(item => item.costGroup === 'common'),
-    }),
-    [state.fixedCosts],
-  );
+  const groupItems = useMemo(() => {
+    return state.fixedCosts.reduce<Record<FixedCostGroup, FixedCostItem[]>>(
+      (acc, item) => {
+        acc[item.costGroup].push(item);
+        return acc;
+      },
+      { facility: [], common: [], marketing: [] },
+    );
+  }, [state.fixedCosts]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -83,7 +90,6 @@ const FixedCostManagementSection: React.FC = () => {
       name: form.name.trim(),
       monthlyAmount: toAmount(form.monthlyAmount),
       costGroup: form.costGroup ?? activeGroup,
-      category: form.category.trim() || undefined,
       notes: form.notes.trim() || undefined,
     };
 
@@ -96,8 +102,7 @@ const FixedCostManagementSection: React.FC = () => {
     setForm({
       id: item.id,
       name: item.name,
-      monthlyAmount: String(item.monthlyAmount ?? ''),
-      category: item.category ?? '',
+      monthlyAmount: item.monthlyAmount ? String(item.monthlyAmount) : '',
       notes: item.notes ?? '',
       costGroup: item.costGroup,
     });
@@ -137,7 +142,7 @@ const FixedCostManagementSection: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">세부 카테고리</th>
+
                 <th className="px-4 py-2 text-right font-medium text-gray-500">월 금액</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
                 <th className="px-4 py-2" />
@@ -146,7 +151,7 @@ const FixedCostManagementSection: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {items.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-gray-400" colSpan={5}>
+                  <td className="px-4 py-6 text-center text-gray-400" colSpan={4}>
                     등록된 항목이 없습니다.
                   </td>
                 </tr>
@@ -154,7 +159,7 @@ const FixedCostManagementSection: React.FC = () => {
                 items.map(item => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-900">{item.name}</td>
-                    <td className="px-4 py-2 text-gray-600">{item.category || '-'}</td>
+
                     <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.monthlyAmount)}</td>
                     <td className="px-4 py-2 text-gray-600">{item.notes || '-'}</td>
                     <td className="px-4 py-2 text-right">
@@ -193,14 +198,27 @@ const FixedCostManagementSection: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">인건비 제외 고정비 입력</h2>
           <p className="mt-1 text-sm text-gray-600">
-            시설·운영비는 시술 시간에 따라 배분되고, 공통비용은 시나리오 탭에서 손익을 검증합니다.
+            시설·운영비는 시술 시간에 따라 배분되고, 공통비용과 마케팅 비용은 시나리오 탭에서 손익을 검증합니다.
           </p>
         </div>
         <div className="text-sm text-gray-600">
           전체 합계: <span className="font-semibold text-gray-900">{formatKrw(total)}</span>
         </div>
       </header>
-
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600">
+          <p className="font-semibold text-gray-700">시설·운영비</p>
+          <p className="mt-1 text-base font-semibold text-gray-900">{formatKrw(facilityTotal)}</p>
+        </div>
+        <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600">
+          <p className="font-semibold text-gray-700">공통비용</p>
+          <p className="mt-1 text-base font-semibold text-gray-900">{formatKrw(commonTotal)}</p>
+        </div>
+        <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600">
+          <p className="font-semibold text-gray-700">마케팅 비용</p>
+          <p className="mt-1 text-base font-semibold text-gray-900">{formatKrw(marketingTotal)}</p>
+        </div>
+      </div>
       <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
         <p className="font-semibold">현재 입력 대상</p>
         <p className="mt-1">
@@ -210,7 +228,7 @@ const FixedCostManagementSection: React.FC = () => {
       </div>
 
       <div className="mt-4 flex gap-2">
-        {(Object.keys(GROUP_CONFIG) as FixedCostGroup[]).map(group => (
+        {GROUP_ORDER.map(group => (
           <button
             key={group}
             type="button"
@@ -249,18 +267,6 @@ const FixedCostManagementSection: React.FC = () => {
             className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </label>
-
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          세부 카테고리
-          <input
-            name="category"
-            value={form.category}
-            onChange={handleChange}
-            placeholder="예: 임대료, 마케팅비, 보험료"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
         <label className="md:col-span-3 flex flex-col gap-1 text-sm text-gray-700">
           메모
           <textarea
@@ -292,11 +298,19 @@ const FixedCostManagementSection: React.FC = () => {
       </form>
 
       <div className="mt-8 space-y-8">
-        {renderGroupTable('facility')}
-        {renderGroupTable('common')}
+        {GROUP_ORDER.map(group => renderGroupTable(group))}
       </div>
     </section>
   );
 };
 
 export default FixedCostManagementSection;
+
+
+
+
+
+
+
+
+
