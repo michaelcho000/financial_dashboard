@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { buildAllBreakdowns } from '../../../services/standaloneCosting/calculations';
 import { clearDraft, loadDraft, saveDraft } from '../../../services/standaloneCosting/storage';
 import {
@@ -184,18 +184,18 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     }
     hydratedRef.current = true;
     setHydrated(true);
+  }, []);
+
   useEffect(() => {
     if (!hydrated || !migrationNoticeRef.current || typeof window === 'undefined') {
       return;
     }
     migrationNoticeRef.current = false;
     const timer = window.setTimeout(() => {
-      window.alert('기존 고정비 항목이 시설·운영비로 분류되었습니다. 필요 시 공통비용으로 이동하세요.');
+      window.alert('湲곗〈 怨좎젙鍮???ぉ???쒖꽕쨌?댁쁺鍮꾨줈 遺꾨쪟?섏뿀?듬땲?? ?꾩슂 ??怨듯넻鍮꾩슜?쇰줈 ?대룞?섏꽭??');
     }, 0);
     return () => window.clearTimeout(timer);
   }, [hydrated]);
-
-  }, []);
 
   useEffect(() => {
     if (!hydratedRef.current) {
@@ -305,3 +305,6 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
+
+
+
