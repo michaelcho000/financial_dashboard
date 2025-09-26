@@ -99,18 +99,9 @@ const MaterialManagementSection: React.FC = () => {
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">3. 소모품 관리</h2>
-          <p className="mt-1 text-sm text-gray-600">울쎄라 팁, 필러 등 단위/단가 정보를 저장합니다.</p>
-        </div>
-        <button
-          type="button"
-          onClick={resetForm}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100"
-        >
-          새 소모품 추가
-        </button>
+      <header className="mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">소모품 관리</h2>
+        <p className="mt-1 text-sm text-gray-600">울쎄라 팁, 필러 등 단위/단가 정보를 저장합니다.</p>
       </header>
 
       <form className="grid gap-4 md:grid-cols-3" onSubmit={handleSubmit}>

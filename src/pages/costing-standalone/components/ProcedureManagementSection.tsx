@@ -216,7 +216,7 @@ const ProcedureManagementSection: React.FC = () => {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <header className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">5. 시술 등록</h2>
+        <h2 className="text-lg font-semibold text-gray-900">시술 등록</h2>
         <p className="mt-1 text-sm text-gray-600">상품별 판매가와 투입 자원을 정의하고 원가를 계산합니다.</p>
       </header>
 

@@ -82,7 +82,7 @@ const FixedCostManagementSection: React.FC = () => {
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <header className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">4. 고정비 관리</h2>
+          <h2 className="text-lg font-semibold text-gray-900">고정비 관리</h2>
           <p className="mt-1 text-sm text-gray-600">임차료, 관리비 등 월 고정비 항목을 입력합니다.</p>
         </div>
         <div className="text-sm text-gray-600">

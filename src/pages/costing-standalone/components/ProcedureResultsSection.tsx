@@ -17,7 +17,7 @@ const ProcedureResultsSection: React.FC = () => {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <header className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">6. 결과 대시보드</h2>
+        <h2 className="text-lg font-semibold text-gray-900">결과 대시보드</h2>
         <p className="mt-1 text-sm text-gray-600">시술별 원가, 마진율, 손익분기 건수를 확인합니다.</p>
       </header>
 

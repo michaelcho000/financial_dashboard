@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import OperationalSettingsSection from './components/OperationalSettingsSection';
 import StaffManagementSection from './components/StaffManagementSection';
 import MaterialManagementSection from './components/MaterialManagementSection';
@@ -7,8 +7,88 @@ import ProcedureManagementSection from './components/ProcedureManagementSection'
 import ProcedureResultsSection from './components/ProcedureResultsSection';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
 
+interface TabDefinition {
+  id: string;
+  label: string;
+  render: React.ReactNode;
+  completion?: () => boolean;
+  incompleteMessage?: string;
+}
+
 const StandaloneCostingContent: React.FC = () => {
-  const { hydrated } = useStandaloneCosting();
+  const { hydrated, state } = useStandaloneCosting();
+  const [activeTab, setActiveTab] = useState<string>('operational');
+
+  const hasOperationalConfig = useMemo(
+    () => state.operational.operatingDays !== null && state.operational.operatingHoursPerDay !== null,
+    [state.operational.operatingDays, state.operational.operatingHoursPerDay],
+  );
+
+  const tabs: TabDefinition[] = useMemo(
+    () => [
+      {
+        id: 'operational',
+        label: '운영 설정',
+        render: <OperationalSettingsSection />,
+        completion: () => hasOperationalConfig,
+        incompleteMessage: '월 운영 설정을 먼저 저장하세요.',
+      },
+      {
+        id: 'staff',
+        label: '인력 관리',
+        render: <StaffManagementSection />,
+        completion: () => state.staff.length > 0,
+        incompleteMessage: '최소 1명의 인력을 등록하세요.',
+      },
+      {
+        id: 'materials',
+        label: '소모품 관리',
+        render: <MaterialManagementSection />,
+        completion: () => state.materials.length > 0,
+        incompleteMessage: '최소 1개의 소모품을 등록하세요.',
+      },
+      {
+        id: 'fixed-costs',
+        label: '고정비 관리',
+        render: <FixedCostManagementSection />,
+        completion: () => state.fixedCosts.length > 0,
+        incompleteMessage: '최소 1개의 고정비를 등록하세요.',
+      },
+      {
+        id: 'procedures',
+        label: '시술 · 결과',
+        render: (
+          <div className="space-y-6">
+            <ProcedureManagementSection />
+            <ProcedureResultsSection />
+          </div>
+        ),
+      },
+    ],
+    [hasOperationalConfig, state.fixedCosts.length, state.materials.length, state.staff.length],
+  );
+
+  const activeIndex = useMemo(() => tabs.findIndex(tab => tab.id === activeTab), [tabs, activeTab]);
+
+  const handleTabSelect = (nextTabId: string) => {
+    const nextIndex = tabs.findIndex(tab => tab.id === nextTabId);
+    if (nextIndex === -1 || nextIndex === activeIndex) {
+      return;
+    }
+
+    if (nextIndex > 0) {
+      for (let i = 0; i < nextIndex; i += 1) {
+        const prerequisite = tabs[i];
+        if (prerequisite.completion && !prerequisite.completion()) {
+          window.alert(prerequisite.incompleteMessage ?? '이전 단계를 먼저 완료하세요.');
+          setActiveTab(prerequisite.id);
+          return;
+        }
+      }
+    }
+
+    setActiveTab(nextTabId);
+  };
 
   if (!hydrated) {
     return (
@@ -17,6 +97,9 @@ const StandaloneCostingContent: React.FC = () => {
       </div>
     );
   }
+
+  const safeIndex = activeIndex >= 0 ? activeIndex : 0;
+  const activeTabDefinition = tabs[safeIndex];
 
   return (
     <div className="space-y-6">
@@ -27,12 +110,32 @@ const StandaloneCostingContent: React.FC = () => {
         </p>
       </section>
 
-      <OperationalSettingsSection />
-      <StaffManagementSection />
-      <MaterialManagementSection />
-      <FixedCostManagementSection />
-      <ProcedureManagementSection />
-      <ProcedureResultsSection />
+      <nav className="flex flex-wrap gap-2">
+        {tabs.map((tab, index) => {
+          const isActive = tab.id === activeTabDefinition.id;
+          const prerequisiteSatisfied =
+            index === 0 || tabs.slice(0, index).every(step => !step.completion || step.completion());
+
+          const baseClasses =
+            'rounded-md border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-100';
+          const activeClasses = 'border-blue-600 bg-blue-600 text-white shadow-sm';
+          const inactiveClasses = 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50';
+          const pendingClasses = prerequisiteSatisfied ? '' : 'opacity-60';
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabSelect(tab.id)}
+              className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses} ${pendingClasses}`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div>{activeTabDefinition.render}</div>
     </div>
   );
 };
