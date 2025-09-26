@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
+import NotificationModal from '../../components/common/NotificationModal';
 import OperationalSettingsSection from './components/OperationalSettingsSection';
+import EquipmentManagementSection from './components/EquipmentManagementSection';
 import StaffManagementSection from './components/StaffManagementSection';
 import MaterialManagementSection from './components/MaterialManagementSection';
 import FixedCostManagementSection from './components/FixedCostManagementSection';
 import ProcedureManagementSection from './components/ProcedureManagementSection';
 import ProcedureResultsSection from './components/ProcedureResultsSection';
+import MarketingInsightsSection from './components/MarketingInsightsSection';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
 
 interface TabDefinition {
@@ -18,6 +21,7 @@ interface TabDefinition {
 const StandaloneCostingContent: React.FC = () => {
   const { hydrated, state } = useStandaloneCosting();
   const [activeTab, setActiveTab] = useState<string>('operational');
+  const [modalMessage, setModalMessage] = useState<string | null>(null);
 
   const hasOperationalConfig = useMemo(
     () => state.operational.operatingDays !== null && state.operational.operatingHoursPerDay !== null,
@@ -28,10 +32,15 @@ const StandaloneCostingContent: React.FC = () => {
     () => [
       {
         id: 'operational',
-        label: '운영 설정',
-        render: <OperationalSettingsSection />,
+        label: '운영 세팅',
+        render: (
+          <div className="space-y-6">
+            <OperationalSettingsSection />
+            <EquipmentManagementSection />
+          </div>
+        ),
         completion: () => hasOperationalConfig,
-        incompleteMessage: '월 운영 설정을 먼저 저장하세요.',
+        incompleteMessage: '운영 세팅을 먼저 저장하세요.',
       },
       {
         id: 'staff',
@@ -64,8 +73,15 @@ const StandaloneCostingContent: React.FC = () => {
           </div>
         ),
       },
+      {
+        id: 'marketing',
+        label: '마케팅 인사이트',
+        render: <MarketingInsightsSection />,
+        completion: () => state.procedures.length > 0,
+        incompleteMessage: '시술 데이터를 먼저 등록하면 마케팅 인사이트 분석을 준비할 수 있습니다.',
+      },
     ],
-    [hasOperationalConfig, state.fixedCosts.length, state.materials.length, state.staff.length],
+    [hasOperationalConfig, state.fixedCosts.length, state.materials.length, state.procedures.length, state.staff.length],
   );
 
   const activeIndex = useMemo(() => tabs.findIndex(tab => tab.id === activeTab), [tabs, activeTab]);
@@ -80,7 +96,7 @@ const StandaloneCostingContent: React.FC = () => {
       for (let i = 0; i < nextIndex; i += 1) {
         const prerequisite = tabs[i];
         if (prerequisite.completion && !prerequisite.completion()) {
-          window.alert(prerequisite.incompleteMessage ?? '이전 단계를 먼저 완료하세요.');
+          setModalMessage(prerequisite.incompleteMessage ?? '이전 단계를 먼저 완료하세요.');
           setActiveTab(prerequisite.id);
           return;
         }
@@ -136,6 +152,12 @@ const StandaloneCostingContent: React.FC = () => {
       </nav>
 
       <div>{activeTabDefinition.render}</div>
+
+      <NotificationModal
+        isOpen={modalMessage !== null}
+        onClose={() => setModalMessage(null)}
+        message={modalMessage ?? ''}
+      />
     </div>
   );
 };

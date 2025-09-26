@@ -1,12 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { buildAllBreakdowns } from '../../../services/standaloneCosting/calculations';
 import { clearDraft, loadDraft, saveDraft } from '../../../services/standaloneCosting/storage';
-import { FixedCostItem, MaterialItem, OperationalConfig, ProcedureFormValues, StandaloneCostingState, StaffProfile } from '../../../services/standaloneCosting/types';
+import {
+  EquipmentProfile,
+  FixedCostItem,
+  MaterialItem,
+  OperationalConfig,
+  ProcedureFormValues,
+  StandaloneCostingState,
+  StaffProfile,
+} from '../../../services/standaloneCosting/types';
 
 type StandaloneCostingAction =
   | { type: 'LOAD_STATE'; payload: StandaloneCostingState }
   | { type: 'RESET' }
   | { type: 'SET_OPERATIONAL'; payload: OperationalConfig }
+  | { type: 'SET_EQUIPMENT_HIERARCHY'; payload: boolean }
+  | { type: 'UPSERT_EQUIPMENT'; payload: EquipmentProfile }
+  | { type: 'REMOVE_EQUIPMENT'; payload: { id: string } }
   | { type: 'UPSERT_STAFF'; payload: StaffProfile }
   | { type: 'REMOVE_STAFF'; payload: { id: string } }
   | { type: 'UPSERT_MATERIAL'; payload: MaterialItem }
@@ -19,6 +30,8 @@ type StandaloneCostingAction =
 
 const buildInitialState = (): StandaloneCostingState => ({
   operational: { operatingDays: null, operatingHoursPerDay: null, notes: undefined },
+  equipment: [],
+  useEquipmentHierarchy: false,
   staff: [],
   materials: [],
   fixedCosts: [],
@@ -45,11 +58,24 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
 const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction): StandaloneCostingState => {
   switch (action.type) {
     case 'LOAD_STATE':
-      return recalcBreakdowns({ ...action.payload }, false);
+      return recalcBreakdowns({ ...buildInitialState(), ...action.payload }, false);
     case 'RESET':
       return buildInitialState();
     case 'SET_OPERATIONAL':
       return recalcBreakdowns({ ...state, operational: action.payload });
+    case 'SET_EQUIPMENT_HIERARCHY':
+      return recalcBreakdowns({ ...state, useEquipmentHierarchy: action.payload });
+    case 'UPSERT_EQUIPMENT': {
+      const exists = state.equipment.some(item => item.id === action.payload.id);
+      const nextEquipment = exists
+        ? state.equipment.map(item => (item.id === action.payload.id ? action.payload : item))
+        : [...state.equipment, action.payload];
+      return recalcBreakdowns({ ...state, equipment: nextEquipment });
+    }
+    case 'REMOVE_EQUIPMENT': {
+      const nextEquipment = state.equipment.filter(item => item.id !== action.payload.id);
+      return recalcBreakdowns({ ...state, equipment: nextEquipment });
+    }
     case 'UPSERT_STAFF': {
       const exists = state.staff.some(item => item.id === action.payload.id);
       const nextStaff = exists
@@ -112,6 +138,9 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
 interface StandaloneCostingContextValue {
   state: StandaloneCostingState;
   setOperationalConfig: (payload: OperationalConfig) => void;
+  setEquipmentHierarchyEnabled: (enabled: boolean) => void;
+  upsertEquipment: (payload: EquipmentProfile) => void;
+  removeEquipment: (id: string) => void;
   upsertStaff: (payload: StaffProfile) => void;
   removeStaff: (id: string) => void;
   upsertMaterial: (payload: MaterialItem) => void;
@@ -158,6 +187,18 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     dispatch({ type: 'UPSERT_STAFF', payload });
   }, []);
 
+  const setEquipmentHierarchyEnabled = useCallback((enabled: boolean) => {
+    dispatch({ type: 'SET_EQUIPMENT_HIERARCHY', payload: enabled });
+  }, []);
+
+  const upsertEquipment = useCallback((payload: EquipmentProfile) => {
+    dispatch({ type: 'UPSERT_EQUIPMENT', payload });
+  }, []);
+
+  const removeEquipment = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_EQUIPMENT', payload: { id } });
+  }, []);
+
   const removeStaff = useCallback((id: string) => {
     dispatch({ type: 'REMOVE_STAFF', payload: { id } });
   }, []);
@@ -194,6 +235,9 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
   const value = useMemo<StandaloneCostingContextValue>(() => ({
     state,
     setOperationalConfig,
+    setEquipmentHierarchyEnabled,
+    upsertEquipment,
+    removeEquipment,
     upsertStaff,
     removeStaff,
     upsertMaterial,
@@ -204,7 +248,23 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     removeProcedure,
     resetAll,
     hydrated,
-  }), [state, setOperationalConfig, upsertStaff, removeStaff, upsertMaterial, removeMaterial, upsertFixedCost, removeFixedCost, upsertProcedure, removeProcedure, resetAll, hydrated]);
+  }), [
+    state,
+    setOperationalConfig,
+    setEquipmentHierarchyEnabled,
+    upsertEquipment,
+    removeEquipment,
+    upsertStaff,
+    removeStaff,
+    upsertMaterial,
+    removeMaterial,
+    upsertFixedCost,
+    removeFixedCost,
+    upsertProcedure,
+    removeProcedure,
+    resetAll,
+    hydrated,
+  ]);
 
   return (
     <StandaloneCostingContext.Provider value={value}>

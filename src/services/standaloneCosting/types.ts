@@ -28,6 +28,13 @@ export interface MaterialItem {
   notes?: string;
 }
 
+export interface EquipmentProfile {
+  id: string;
+  name: string;
+  leaseCost: number;
+  notes?: string;
+}
+
 export interface MaterialUsage {
   materialId: string;
   quantity: number; // usage expressed in unitLabel
@@ -65,6 +72,8 @@ export interface ProcedureCostBreakdown {
 
 export interface StandaloneCostingState {
   operational: OperationalConfig;
+  equipment: EquipmentProfile[];
+  useEquipmentHierarchy: boolean;
   staff: StaffProfile[];
   materials: MaterialItem[];
   fixedCosts: FixedCostItem[];

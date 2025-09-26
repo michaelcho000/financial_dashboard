@@ -4,6 +4,7 @@ import { MaterialUsage, ProcedureFormValues, StaffAssignment } from '../../../se
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw, formatPercentage } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
 
 interface ProcedureFormState {
   id: string | null;
@@ -58,6 +59,8 @@ const ProcedureManagementSection: React.FC = () => {
   const [newStaffMinutes, setNewStaffMinutes] = useState<string>('0');
   const [newMaterialId, setNewMaterialId] = useState<string>('');
   const [newMaterialQuantity, setNewMaterialQuantity] = useState<string>('1');
+  const [pendingProcedure, setPendingProcedure] = useState<ProcedureFormValues | null>(null);
+  const [warnNoMaterial, setWarnNoMaterial] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -136,6 +139,11 @@ const ProcedureManagementSection: React.FC = () => {
       }))
       .filter(item => item.quantity > 0);
 
+  const finalizeSave = (payload: ProcedureFormValues) => {
+    upsertProcedure(payload);
+    resetForm();
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -143,19 +151,27 @@ const ProcedureManagementSection: React.FC = () => {
     const treatmentMinutes = parseNumber(form.treatmentMinutes) ?? 0;
     const totalMinutes = parseNumber(form.totalMinutes) ?? treatmentMinutes;
 
+    const assignments = toAssignments(staffAssignments);
+    const materials = toMaterialUsages(materialUsages);
+
     const payload: ProcedureFormValues = {
       id: form.id ?? generateId(),
       name: form.name.trim(),
       price,
       treatmentMinutes,
       totalMinutes,
-      staffAssignments: toAssignments(staffAssignments),
-      materialUsages: toMaterialUsages(materialUsages),
+      staffAssignments: assignments,
+      materialUsages: materials,
       notes: form.notes.trim() || undefined,
     };
 
-    upsertProcedure(payload);
-    resetForm();
+    if (materials.length === 0) {
+      setPendingProcedure(payload);
+      setWarnNoMaterial(true);
+      return;
+    }
+
+    finalizeSave(payload);
   };
 
   const handleEdit = (procedure: ProcedureFormValues) => {
@@ -450,11 +466,11 @@ const ProcedureManagementSection: React.FC = () => {
           </div>
         </div>
 
-        <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-          <div className="mb-2 flex items-center justify-between text-blue-900">
-            <span className="font-semibold">원가 미리보기</span>
-            <span className="text-xs text-blue-700">
-              총 고정비 {formatKrw(totalFixedCost)} 기준 (월 고정비 / 월 가용 시간)
+      <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="mb-2 flex items-center justify-between text-blue-900">
+          <span className="font-semibold">원가 미리보기</span>
+          <span className="text-xs text-blue-700">
+            총 고정비 {formatKrw(totalFixedCost)} 기준 (월 고정비 / 월 가용 시간)
             </span>
           </div>
           {previewBreakdown ? (
@@ -567,6 +583,25 @@ const ProcedureManagementSection: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      <ConfirmationModal
+        isOpen={warnNoMaterial}
+        title="소모품이 등록되지 않았습니다"
+        message="소모품이 없는 시술입니다. 등록을 계속 진행하시겠습니까?"
+        confirmText="계속 저장"
+        cancelText="취소"
+        onConfirm={() => {
+          if (pendingProcedure) {
+            finalizeSave(pendingProcedure);
+          }
+          setPendingProcedure(null);
+          setWarnNoMaterial(false);
+        }}
+        onCancel={() => {
+          setPendingProcedure(null);
+          setWarnNoMaterial(false);
+        }}
+      />
     </section>
   );
 };

@@ -55,7 +55,7 @@ const OperationalSettingsSection: React.FC = () => {
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <header className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">1. 월 운영 설정</h2>
+          <h2 className="text-lg font-semibold text-gray-900">운영 세팅</h2>
           <p className="mt-1 text-sm text-gray-600">영업일과 영업시간을 입력해 월 가용 시간을 정의합니다.</p>
         </div>
         {savedAt && <span className="text-xs text-gray-400">최근 저장: {new Date(savedAt).toLocaleString('ko-KR')}</span>}
