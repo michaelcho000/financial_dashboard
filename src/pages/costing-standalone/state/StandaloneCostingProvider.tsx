@@ -40,16 +40,25 @@ const buildInitialState = (): StandaloneCostingState => ({
   lastSavedAt: null,
 });
 
+const normalizeFixedCost = (item: FixedCostItem): FixedCostItem => ({
+  ...item,
+  costGroup: item.costGroup === 'common' ? 'common' : 'facility',
+});
+
+const normalizeFixedCosts = (items: FixedCostItem[]): FixedCostItem[] => items.map(normalizeFixedCost);
+
 const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true): StandaloneCostingState => {
+  const normalizedFixedCosts = normalizeFixedCosts(state.fixedCosts);
   const breakdowns = buildAllBreakdowns(state.procedures, {
     staff: state.staff,
     materials: state.materials,
-    fixedCosts: state.fixedCosts,
+    fixedCosts: normalizedFixedCosts,
     operational: state.operational,
   });
 
   return {
     ...state,
+    fixedCosts: normalizedFixedCosts,
     breakdowns,
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
   };
@@ -107,10 +116,11 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
       return recalcBreakdowns({ ...state, materials: nextMaterials, procedures: nextProcedures });
     }
     case 'UPSERT_FIXED_COST': {
-      const exists = state.fixedCosts.some(item => item.id === action.payload.id);
+      const payload = normalizeFixedCost(action.payload);
+      const exists = state.fixedCosts.some(item => item.id === payload.id);
       const nextFixedCosts = exists
-        ? state.fixedCosts.map(item => (item.id === action.payload.id ? action.payload : item))
-        : [...state.fixedCosts, action.payload];
+        ? state.fixedCosts.map(item => (item.id === payload.id ? payload : item))
+        : [...state.fixedCosts, payload];
       return recalcBreakdowns({ ...state, fixedCosts: nextFixedCosts });
     }
     case 'REMOVE_FIXED_COST': {
@@ -158,6 +168,7 @@ const StandaloneCostingContext = createContext<StandaloneCostingContextValue | n
 export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
   const hydratedRef = useRef(false);
+  const migrationNoticeRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -166,10 +177,24 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     }
     const restored = loadDraft();
     if (restored) {
-      dispatch({ type: 'LOAD_STATE', payload: restored });
+      dispatch({ type: 'LOAD_STATE', payload: restored.state });
+      if (restored.migrated) {
+        migrationNoticeRef.current = true;
+      }
     }
     hydratedRef.current = true;
     setHydrated(true);
+  useEffect(() => {
+    if (!hydrated || !migrationNoticeRef.current || typeof window === 'undefined') {
+      return;
+    }
+    migrationNoticeRef.current = false;
+    const timer = window.setTimeout(() => {
+      window.alert('기존 고정비 항목이 시설·운영비로 분류되었습니다. 필요 시 공통비용으로 이동하세요.');
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [hydrated]);
+
   }, []);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-export interface OperationalConfig {
+﻿export interface OperationalConfig {
   operatingDays: number | null;
   operatingHoursPerDay: number | null;
   notes?: string;
@@ -40,10 +40,13 @@ export interface MaterialUsage {
   quantity: number; // usage expressed in unitLabel
 }
 
+export type FixedCostGroup = 'facility' | 'common';
+
 export interface FixedCostItem {
   id: string;
   name: string;
   monthlyAmount: number;
+  costGroup: FixedCostGroup;
   category?: string;
   notes?: string;
 }

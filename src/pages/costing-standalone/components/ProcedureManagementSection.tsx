@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { buildProcedureBreakdown, calculateMonthlyFixedTotal } from '../../../services/standaloneCosting/calculations';
 import { MaterialUsage, ProcedureFormValues, StaffAssignment } from '../../../services/standaloneCosting/types';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
@@ -203,7 +203,7 @@ const ProcedureManagementSection: React.FC = () => {
     const totalMinutes = parseNumber(form.totalMinutes) ?? treatmentMinutes;
     return {
       id: form.id ?? 'preview',
-      name: form.name.trim() || '미리보기',
+      name: form.name.trim() || '誘몃━蹂닿린',
       price,
       treatmentMinutes,
       totalMinutes,
@@ -227,20 +227,27 @@ const ProcedureManagementSection: React.FC = () => {
     }
   }, [previewProcedure, state.staff, state.materials, state.fixedCosts, state.operational]);
 
-  const totalFixedCost = useMemo(() => calculateMonthlyFixedTotal(state.fixedCosts), [state.fixedCosts]);
+  const facilityFixedCost = useMemo(
+    () => calculateMonthlyFixedTotal(state.fixedCosts, 'facility'),
+    [state.fixedCosts],
+  );
+  const commonFixedCost = useMemo(
+    () => calculateMonthlyFixedTotal(state.fixedCosts, 'common'),
+    [state.fixedCosts],
+  );
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <header className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">시술 등록</h2>
-        <p className="mt-1 text-sm text-gray-600">상품별 판매가와 투입 자원을 정의하고 원가를 계산합니다.</p>
+        <p className="mt-1 text-sm text-gray-600">판매가와 투입 자원을 입력해 원가를 계산합니다.</p>
       </header>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-gray-700">
             시술명
-            <input
+          <input
               name="name"
               value={form.name}
               onChange={handleChange}
@@ -281,13 +288,13 @@ const ProcedureManagementSection: React.FC = () => {
               min={0}
               value={form.totalMinutes}
               onChange={handleChange}
-              placeholder="시술 소요시간과 동일하면 비워두세요"
+              placeholder="총 체류시간이 시술 소요시간과 같다면 비워두세요"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
           <label className="md:col-span-2 flex flex-col gap-1 text-sm text-gray-700">
-            메모
+            硫붾え
             <textarea
               name="notes"
               value={form.notes}
@@ -307,10 +314,10 @@ const ProcedureManagementSection: React.FC = () => {
                 onChange={event => setNewStaffId(event.target.value)}
                 className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
-                <option value="">인력을 선택하세요</option>
+                                <option value="">인력을 선택하세요</option>
                 {state.staff.map(staff => (
                   <option key={staff.id} value={staff.id}>
-                    {staff.role} · {staff.name}
+                    {staff.role} 쨌 {staff.name}
                   </option>
                 ))}
               </select>
@@ -320,7 +327,7 @@ const ProcedureManagementSection: React.FC = () => {
                 value={newStaffMinutes}
                 onChange={event => setNewStaffMinutes(event.target.value)}
                 className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="분"
+                placeholder="예: 30"
               />
               <button
                 type="button"
@@ -354,7 +361,7 @@ const ProcedureManagementSection: React.FC = () => {
                     return (
                       <tr key={item.staffId} className="hover:bg-gray-50">
                         <td className="px-4 py-2 text-gray-900">
-                          {staff ? `${staff.role} · ${staff.name}` : '삭제된 인력'}
+                          {staff ? `${staff.role} · ${staff.name}` : '인력을 선택하세요'}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <input
@@ -371,7 +378,7 @@ const ProcedureManagementSection: React.FC = () => {
                             onClick={() => handleRemoveStaff(item.staffId)}
                             className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
                           >
-                            삭제
+                            제거
                           </button>
                         </td>
                       </tr>
@@ -392,7 +399,7 @@ const ProcedureManagementSection: React.FC = () => {
                 onChange={event => setNewMaterialId(event.target.value)}
                 className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
-                <option value="">소모품을 선택하세요</option>
+                                <option value="">소모품을 선택하세요</option>
                 {state.materials.map(material => (
                   <option key={material.id} value={material.id}>
                     {material.name}
@@ -405,7 +412,7 @@ const ProcedureManagementSection: React.FC = () => {
                 value={newMaterialQuantity}
                 onChange={event => setNewMaterialQuantity(event.target.value)}
                 className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="사용량"
+                placeholder="예: 1"
               />
               <button
                 type="button"
@@ -422,7 +429,7 @@ const ProcedureManagementSection: React.FC = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">소모품</th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-500">사용량</th>
+                  <th className="px-4 py-2 text-right font-medium text-gray-500">사용 수량</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -438,7 +445,7 @@ const ProcedureManagementSection: React.FC = () => {
                     const material = state.materials.find(candidate => candidate.id === item.materialId);
                     return (
                       <tr key={item.materialId} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-900">{material ? material.name : '삭제된 소모품'}</td>
+                        <td className="px-4 py-2 text-gray-900">{material ? material.name : '소모품을 선택하세요'}</td>
                         <td className="px-4 py-2 text-right">
                           <input
                             type="number"
@@ -454,7 +461,7 @@ const ProcedureManagementSection: React.FC = () => {
                             onClick={() => handleRemoveMaterial(item.materialId)}
                             className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
                           >
-                            삭제
+                            제거
                           </button>
                         </td>
                       </tr>
@@ -469,72 +476,74 @@ const ProcedureManagementSection: React.FC = () => {
       <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
         <div className="mb-2 flex items-center justify-between text-blue-900">
           <span className="font-semibold">원가 미리보기</span>
-          <span className="text-xs text-blue-700">
-            총 고정비 {formatKrw(totalFixedCost)} 기준 (월 고정비 / 월 가용 시간)
-            </span>
-          </div>
-          {previewBreakdown ? (
-            <div className="grid gap-2 md:grid-cols-2">
-              <div>
-                <div className="flex justify-between">
-                  <span>직접 인건비</span>
-                  <span className="font-medium">{formatKrw(previewBreakdown.directLaborCost)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>소모품 비용</span>
-                  <span className="font-medium">{formatKrw(previewBreakdown.consumableCost)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>고정비 배분</span>
-                  <span className="font-medium">{formatKrw(previewBreakdown.fixedCostAllocated)}</span>
-                </div>
+          <span className="text-xs text-blue-700">시설·운영비 {formatKrw(facilityFixedCost)} 기준 (월 시설·운영비 / 월 가용 시간)</span>
+        </div>
+        <p className="mb-3 text-xs text-blue-700">
+          공통비용 {formatKrw(commonFixedCost)}은 시나리오 탭에서 별도로 검토합니다.
+        </p>
+        {previewBreakdown ? (
+          <div className="grid gap-2 md:grid-cols-2">
+            <div>
+              <div className="flex justify-between">
+                <span>직접 인건비</span>
+                <span className="font-medium">{formatKrw(previewBreakdown.directLaborCost)}</span>
               </div>
-              <div>
-                <div className="flex justify-between">
-                  <span>총 원가</span>
-                  <span className="font-semibold">{formatKrw(previewBreakdown.totalCost)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>마진</span>
-                  <span className={previewBreakdown.margin >= 0 ? 'font-semibold text-blue-900' : 'font-semibold text-red-600'}>
-                    {formatKrw(previewBreakdown.margin)} ({formatPercentage(previewBreakdown.marginRate)})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>손익분기 건수</span>
-                  <span className="font-medium">
-                    {previewBreakdown.breakevenUnits !== null
-                      ? Math.ceil(previewBreakdown.breakevenUnits).toLocaleString('ko-KR') + '건'
-                      : '기여이익이 부족합니다'}
-                  </span>
-                </div>
+              <div className="flex justify-between">
+                <span>소모품 비용</span>
+                <span className="font-medium">{formatKrw(previewBreakdown.consumableCost)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>고정비 배분</span>
+                <span className="font-medium">{formatKrw(previewBreakdown.fixedCostAllocated)}</span>
               </div>
             </div>
-          ) : (
-            <p>입력값을 기반으로 원가를 계산하는 중 오류가 발생했습니다.</p>
-          )}
-        </div>
+            <div>
+              <div className="flex justify-between">
+                <span>총 원가</span>
+                <span className="font-semibold">{formatKrw(previewBreakdown.totalCost)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>마진</span>
+                <span className={previewBreakdown.margin >= 0 ? 'font-semibold text-blue-900' : 'font-semibold text-red-600'}>
+                  {formatKrw(previewBreakdown.margin)} ({formatPercentage(previewBreakdown.marginRate)})
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>손익분기 건수</span>
+                <span className="font-medium">
+                  {previewBreakdown.breakevenUnits !== null
+                    ? Math.ceil(previewBreakdown.breakevenUnits).toLocaleString('ko-KR') + '건'
+                    : '기여이익이 부족합니다'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p>입력값을 기반으로 원가를 계산하는 중 오류가 발생했습니다.</p>
+        )}
+      </div>
 
-        <div className="flex justify-end gap-2">
-          {form.id && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-            >
-              취소
-            </button>
-          )}
+      <div className="flex justify-end gap-2">
+        {form.id && (
           <button
-            type="submit"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            type="button"
+            onClick={resetForm}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
           >
-            {form.id ? '시술 수정' : '시술 등록'}
+            취소
           </button>
-        </div>
-      </form>
+        )}
+        <button
+          type="submit"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          {form.id ? '시술 수정' : '시술 등록'}
+        </button>
+      </div>
 
-      <div className="mt-8 overflow-x-auto">
+    </form>
+
+    <div className="mt-8 overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -549,7 +558,7 @@ const ProcedureManagementSection: React.FC = () => {
             {state.procedures.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-center text-gray-400" colSpan={5}>
-                  등록된 시술이 없습니다.
+                  ?깅줉???쒖닠???놁뒿?덈떎.
                 </td>
               </tr>
             ) : (
@@ -586,10 +595,10 @@ const ProcedureManagementSection: React.FC = () => {
 
       <ConfirmationModal
         isOpen={warnNoMaterial}
-        title="소모품이 등록되지 않았습니다"
+        title="소모품이 등록되어 있지 않습니다"
         message="소모품이 없는 시술입니다. 등록을 계속 진행하시겠습니까?"
         confirmText="계속 저장"
-        cancelText="취소"
+        cancelText="痍⑥냼"
         onConfirm={() => {
           if (pendingProcedure) {
             finalizeSave(pendingProcedure);
@@ -607,3 +616,7 @@ const ProcedureManagementSection: React.FC = () => {
 };
 
 export default ProcedureManagementSection;
+
+
+
+

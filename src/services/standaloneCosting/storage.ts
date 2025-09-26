@@ -1,11 +1,64 @@
-import { StandaloneCostingDraft, StandaloneCostingState } from './types';
+﻿import { FixedCostItem, StandaloneCostingDraft, StandaloneCostingState } from './types';
 
-const STORAGE_KEY = "standaloneCosting.v1";
-const CURRENT_VERSION = 1;
+const STORAGE_KEY = 'standaloneCosting.v1';
+const CURRENT_VERSION = 2;
 
-const isBrowser = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
-export const loadDraft = (): StandaloneCostingState | null => {
+export interface LoadedDraftResult {
+  state: StandaloneCostingState;
+  migrated: boolean;
+}
+
+type PartialState = Partial<StandaloneCostingState>;
+
+const normalizeFixedCost = (item: FixedCostItem): FixedCostItem => ({
+  ...item,
+  costGroup: item.costGroup === 'common' ? 'common' : 'facility',
+});
+
+const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
+  operational: state.operational ?? { operatingDays: null, operatingHoursPerDay: null, notes: undefined },
+  equipment: state.equipment ?? [],
+  useEquipmentHierarchy: state.useEquipmentHierarchy ?? false,
+  staff: state.staff ?? [],
+  materials: state.materials ?? [],
+  fixedCosts: state.fixedCosts ?? [],
+  procedures: state.procedures ?? [],
+  breakdowns: state.breakdowns ?? [],
+  lastSavedAt: state.lastSavedAt ?? null,
+});
+
+const normalizeState = (state: PartialState): StandaloneCostingState => {
+  const ensured = ensureStateShape(state);
+  return {
+    ...ensured,
+    fixedCosts: ensured.fixedCosts.map(normalizeFixedCost),
+  };
+};
+
+const migrateState = (state: PartialState, version: number): StandaloneCostingState => {
+  if (version >= CURRENT_VERSION) {
+    return normalizeState(state);
+  }
+
+  let next: PartialState = { ...state };
+
+  if (version < 2) {
+    const fixedCosts = Array.isArray(next.fixedCosts) ? next.fixedCosts : [];
+    next = {
+      ...next,
+      fixedCosts: fixedCosts.map(item => ({
+        ...(item as FixedCostItem),
+        costGroup: (item as FixedCostItem)?.costGroup === 'common' ? 'common' : 'facility',
+      })),
+    };
+  }
+
+  return normalizeState(next);
+};
+
+export const loadDraft = (): LoadedDraftResult | null => {
   if (!isBrowser) {
     return null;
   }
@@ -14,11 +67,22 @@ export const loadDraft = (): StandaloneCostingState | null => {
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as StandaloneCostingDraft;
-    if (!parsed || parsed.version !== CURRENT_VERSION) {
+    const parsed = JSON.parse(raw) as Partial<StandaloneCostingDraft> & { version?: number };
+    if (!parsed || typeof parsed !== 'object' || !parsed.state) {
       return null;
     }
-    return parsed.state;
+
+    const version = typeof parsed.version === 'number' ? parsed.version : 1;
+    if (version > CURRENT_VERSION) {
+      return null;
+    }
+
+    if (version === CURRENT_VERSION) {
+      return { state: normalizeState(parsed.state), migrated: false };
+    }
+
+    const migratedState = migrateState(parsed.state, version);
+    return { state: migratedState, migrated: true };
   } catch (error) {
     console.error('[StandaloneCosting] Failed to load draft', error);
     return null;

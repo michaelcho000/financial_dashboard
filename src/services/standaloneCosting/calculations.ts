@@ -1,4 +1,4 @@
-import { FixedCostItem, MaterialItem, MaterialUsage, OperationalConfig, ProcedureCostBreakdown, ProcedureFormValues, StaffAssignment, StaffProfile } from './types';
+﻿import { FixedCostGroup, FixedCostItem, MaterialItem, MaterialUsage, OperationalConfig, ProcedureCostBreakdown, ProcedureFormValues, StaffAssignment, StaffProfile } from './types';
 
 const MINUTES_IN_HOUR = 60;
 
@@ -46,23 +46,42 @@ const calculateMaterialCost = (usages: MaterialUsage[], materials: MaterialItem[
   }, 0);
 };
 
-export const calculateMonthlyFixedTotal = (fixedCosts: FixedCostItem[]): number =>
-  fixedCosts.reduce((sum, item) => sum + item.monthlyAmount, 0);
+export const calculateMonthlyFixedTotal = (fixedCosts: FixedCostItem[], group?: FixedCostGroup): number =>
+  fixedCosts.reduce((sum, item) => {
+    if (group && item.costGroup !== group) {
+      return sum;
+    }
+    return sum + item.monthlyAmount;
+  }, 0);
+
+export const summarizeFixedCosts = (fixedCosts: FixedCostItem[]): {
+  facilityTotal: number;
+  commonTotal: number;
+  total: number;
+} => {
+  const facilityTotal = calculateMonthlyFixedTotal(fixedCosts, 'facility');
+  const commonTotal = calculateMonthlyFixedTotal(fixedCosts, 'common');
+  return {
+    facilityTotal,
+    commonTotal,
+    total: facilityTotal + commonTotal,
+  };
+};
 
 const calculateFixedCostPerMinute = (fixedCosts: FixedCostItem[], operationalMinutes: number): number => {
   if (!operationalMinutes) {
     return 0;
   }
-  const totalFixed = calculateMonthlyFixedTotal(fixedCosts);
-  return totalFixed / operationalMinutes;
+  const facilityFixed = calculateMonthlyFixedTotal(fixedCosts, 'facility');
+  return facilityFixed / operationalMinutes;
 };
 
-const calculateBreakevenUnits = (price: number, directCost: number, monthlyFixedTotal: number): number | null => {
+const calculateBreakevenUnits = (price: number, directCost: number, monthlyFacilityFixed: number): number | null => {
   const contribution = price - directCost;
   if (contribution <= 0) {
     return null;
   }
-  return monthlyFixedTotal / contribution;
+  return monthlyFacilityFixed / contribution;
 };
 
 export const buildProcedureBreakdown = (procedure: ProcedureFormValues, context: {
@@ -79,8 +98,12 @@ export const buildProcedureBreakdown = (procedure: ProcedureFormValues, context:
   const totalCost = directLaborCost + consumableCost + fixedCostAllocated;
   const margin = procedure.price - totalCost;
   const marginRate = procedure.price ? (margin / procedure.price) * 100 : 0;
-  const monthlyFixedTotal = calculateMonthlyFixedTotal(context.fixedCosts);
-  const breakevenUnits = calculateBreakevenUnits(procedure.price, directLaborCost + consumableCost, monthlyFixedTotal);
+  const monthlyFacilityFixed = calculateMonthlyFixedTotal(context.fixedCosts, 'facility');
+  const breakevenUnits = calculateBreakevenUnits(
+    procedure.price,
+    directLaborCost + consumableCost,
+    monthlyFacilityFixed,
+  );
 
   return {
     procedureId: procedure.id,
