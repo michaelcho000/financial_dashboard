@@ -1,22 +1,25 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This Vite-powered React application keeps runtime code in `src/`. Feature components sit under `src/components/`, page views in `src/pages/`, shared layouts in `src/layouts/`, and hooks in `src/hooks/`. Global state providers belong in `src/contexts/`, and reusable services live in `src/services/`. Shared domain types should be declared in `src/types.ts`. Build artifacts compile into `dist/`; never edit generated files. The root `index.html` bootstraps the client, and `.env.local` stores local-only environment variables such as `GEMINI_API_KEY`.
+- `src/` holds runtime TypeScript. UI atoms live in `src/components/`, page views in `src/pages/`, layout wrappers in `src/layouts/`, hooks in `src/hooks/`, context providers in `src/contexts/`, and shared services in `src/services/`.
+- Shared types stay in `src/types.ts`; update it whenever new domain models are added.
+- `docs/` contains supporting specs and financial references; `db/` stores seed data and migration helpers. Keep generated bundles inside `dist/` only.
+- Global styles live in `index.css`; `index.html` bootstraps Vite. Stash secrets in `.env.local` (e.g., `GEMINI_API_KEY`).
 
 ## Build, Test, and Development Commands
-- `npm install` installs workspace dependencies; run after cloning or updating packages.
-- `npm run dev` launches the Vite dev server at `http://localhost:3000` with hot reloading.
-- `npm run build` performs TypeScript checks and outputs the production bundle to `dist/`.
-- `npm run preview` serves the latest build for release verification.
+- `npm install` — synchronize dependencies after cloning or switching branches.
+- `npm run dev` — start the Vite dev server on `http://localhost:3000` with HMR.
+- `npm run build` — run TypeScript checks and emit production assets to `dist/`.
+- `npm run preview` — serve the latest build for acceptance walkthroughs.
 
 ## Coding Style & Naming Conventions
-Write all runtime code in TypeScript using functional React components and hooks. Follow two-space indentation and prefer single quotes in source files; JSON files keep double quotes. Name components in PascalCase (`SettingsPage.tsx`), hooks with a `use` prefix (`useAccountBalance`), and singleton services in PascalCase (`DatabaseService`). Keep side effects inside services or dedicated hooks.
+Use TypeScript with functional React components, two-space indentation, and single quotes; JSON stays double-quoted. Components use PascalCase (`CashFlowTable.tsx`), hooks use `use` prefixes (`useLedgerSummary`), and services use PascalCase singletons. Co-locate module-specific assets beside their component; shared utilities belong in `src/services/`.
 
 ## Testing Guidelines
-Automated tests are not yet configured. When adding coverage, colocate files as `ComponentName.test.tsx` beside the source and document the command required to run them. Before releases, run `npm run build` followed by `npm run preview` to manually verify user flows against the production bundle.
+Test tooling is not bundled yet. When introducing tests, colocate them as `ComponentName.test.tsx` next to the source, document the run command in the PR, and rely on `npm run build` plus `npm run preview` for manual regression coverage until an automated suite is added.
 
 ## Commit & Pull Request Guidelines
-Commit messages should be short, imperative verbs (`Add tenant template defaults`) and scoped to a single concern. Pull requests must summarize changes, list validation commands, attach screenshots or GIFs for UI updates, and link related issues. Update `README.md`, `AGENTS.md`, or configuration notes whenever workflows, environment variables, or scripts change.
+Write imperative, single-focus commit messages (e.g., `Add cash flow importer`). Pull requests should summarize intent, list validation steps, link issues, and attach UI captures when screens change. Update `README.md`, `AGENTS.md`, or related docs whenever workflows, environment variables, or scripts evolve.
 
 ## Security & Configuration Tips
-Never commit secrets; keep API keys inside `.env.local` and share via secure channels. When altering data workflows such as `DatabaseService` or tenant template defaults, verify migrations preserve tenant data and rerun `npm run build` to confirm the bundle still compiles.
+Do not commit `.env.local` or spreadsheets containing private ledger data. Validate schema or migration scripts in `db/` before merging, and rerun `npm run build` afterward to ensure the bundle stays green.

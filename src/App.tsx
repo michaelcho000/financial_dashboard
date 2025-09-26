@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { featureFlags } from './config/featureFlags';
@@ -17,7 +17,7 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminTenantsPage from './pages/AdminTenantsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import SettingsPage from './pages/SettingsPage';
-import CostingRouter from './pages/costing/CostingRouter';
+import StandaloneCostingPage from './pages/costing-standalone/StandaloneCostingPage';
 
 const App: React.FC = () => {
     const { currentUser, loading } = useAuth();
@@ -58,7 +58,7 @@ const App: React.FC = () => {
                                 <Route path="income-statement" element={<IncomeStatementPage />} />
                                 <Route path="fixed-costs" element={<FixedCostsPage />} />
                                 {featureFlags.costingModule && (
-                                    <Route path="costing/*" element={<CostingRouter />} />
+                                    <Route path="costing" element={<StandaloneCostingPage />} />
                                 )}
                                 <Route path="account-management" element={<AccountManagementPage />} />
                                 <Route path="reports" element={<MonthlyReportPage />} />
@@ -84,3 +84,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { HomeIcon } from './icons/HomeIcon';
 import { ChartIcon } from './icons/ChartIcon';
@@ -27,7 +27,7 @@ const buildStaffNavItems = (): NavItem[] => {
   ];
 
   if (featureFlags.costingModule) {
-    items.splice(2, 0, { icon: <DocumentIcon />, label: '원가 인사이트', path: '/costing/base' });
+    items.splice(2, 0, { icon: <DocumentIcon />, label: '원가 인사이트', path: '/costing' });
   }
 
   return items;
@@ -198,3 +198,4 @@ const Sidebar: React.FC = () => {
 };
 
 export default Sidebar;
+

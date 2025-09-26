@@ -34,3 +34,11 @@ export const formatMonth = (month: string): string => {
   }
   return `${year}년 ${numericMonth}월`;
 };
+
+export const formatKrw = (value: number): string => {
+  if (Number.isNaN(value) || !Number.isFinite(value)) {
+    return '0원';
+  }
+  const rounded = Math.round(value);
+  return `${rounded.toLocaleString('ko-KR')}원`;
+};
