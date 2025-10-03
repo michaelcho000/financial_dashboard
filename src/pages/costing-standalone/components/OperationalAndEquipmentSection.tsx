@@ -229,29 +229,30 @@ const OperationalAndEquipmentSection: React.FC = () => {
       {/* 장비 상세 모드 섹션 */}
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <header className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">장비 상세 모드</h2>
+            <p className="mt-1 text-sm text-gray-600">장비별 리스료를 관리합니다 (준비 중).</p>
+          </div>
           <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">장비 상세 모드</h2>
-              <p className="mt-1 text-sm text-gray-600">장비별 리스료를 관리합니다 (준비 중).</p>
-            </div>
-            <label className="inline-flex items-center">
+            <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="sr-only peer"
                 checked={state.useEquipmentHierarchy}
                 onChange={handleEquipmentToggle}
               />
-              <span className="ml-2 text-sm text-gray-700">활성화</span>
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+              <span className="ms-3 text-sm font-medium text-gray-700">활성화</span>
             </label>
+            {state.useEquipmentHierarchy && (
+              <button
+                onClick={openEquipmentModal}
+                className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                + 장비 추가
+              </button>
+            )}
           </div>
-          {state.useEquipmentHierarchy && (
-            <button
-              onClick={openEquipmentModal}
-              className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              + 장비 추가
-            </button>
-          )}
         </header>
 
         {state.useEquipmentHierarchy ? (
