@@ -5,12 +5,14 @@ import { formatKrw } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
 
 interface EquipmentFormState {
+  id: string | null;
   name: string;
   leaseCost: string;
   notes: string;
 }
 
 const emptyForm: EquipmentFormState = {
+  id: null,
   name: '',
   leaseCost: '',
   notes: '',
@@ -29,6 +31,10 @@ const EquipmentManagementSection: React.FC = () => {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
+  const resetForm = () => {
+    setForm(emptyForm);
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!state.useEquipmentHierarchy) {
@@ -38,14 +44,23 @@ const EquipmentManagementSection: React.FC = () => {
     const leaseCostValue = form.leaseCost.trim() ? Number(form.leaseCost) : 0;
 
     const payload: EquipmentProfile = {
-      id: generateId(),
+      id: form.id ?? generateId(),
       name: form.name.trim(),
       leaseCost: Number.isFinite(leaseCostValue) ? leaseCostValue : 0,
       notes: form.notes.trim() || undefined,
     };
 
     upsertEquipment(payload);
-    setForm(emptyForm);
+    resetForm();
+  };
+
+  const handleEdit = (equipment: EquipmentProfile) => {
+    setForm({
+      id: equipment.id,
+      name: equipment.name,
+      leaseCost: String(equipment.leaseCost ?? ''),
+      notes: equipment.notes ?? '',
+    });
   };
 
   const handleDelete = (equipment: EquipmentProfile) => {
@@ -126,13 +141,23 @@ const EquipmentManagementSection: React.FC = () => {
           />
         </label>
 
-        <div className="md:col-span-3 flex justify-end">
+        <div className="md:col-span-3 flex justify-end gap-2">
+          {form.id && (
+            <button
+              type="button"
+              onClick={resetForm}
+              disabled={isDisabled}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              취소
+            </button>
+          )}
           <button
             type="submit"
             disabled={isDisabled || !form.name.trim()}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500"
           >
-            장비 저장
+            {form.id ? '변경 저장' : '장비 추가'}
           </button>
         </div>
       </form>
@@ -161,14 +186,24 @@ const EquipmentManagementSection: React.FC = () => {
                   <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.leaseCost)}</td>
                   <td className="px-4 py-2 text-gray-600">{item.notes || '-'}</td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item)}
-                      disabled={isDisabled}
-                      className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:border-gray-200 disabled:text-gray-400"
-                    >
-                      삭제
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(item)}
+                        disabled={isDisabled}
+                        className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
+                      >
+                        편집
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item)}
+                        disabled={isDisabled}
+                        className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:border-gray-200 disabled:text-gray-400"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

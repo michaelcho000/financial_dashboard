@@ -7,6 +7,7 @@ import MaterialManagementSection from './components/MaterialManagementSection';
 import FixedCostManagementSection from './components/FixedCostManagementSection';
 import ProcedureManagementSection from './components/ProcedureManagementSection';
 import ProcedureResultsSection from './components/ProcedureResultsSection';
+import ProcedureCatalogSection from './components/ProcedureCatalogSection';
 import MarketingInsightsSection from './components/MarketingInsightsSection';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
 
@@ -22,6 +23,7 @@ const StandaloneCostingContent: React.FC = () => {
   const { hydrated, state } = useStandaloneCosting();
   const [activeTab, setActiveTab] = useState<string>('operational');
   const [modalMessage, setModalMessage] = useState<string | null>(null);
+  const [editProcedureId, setEditProcedureId] = useState<string | null>(null);
 
   const hasOperationalConfig = useMemo(
     () => state.operational.operatingDays !== null && state.operational.operatingHoursPerDay !== null,
@@ -65,13 +67,34 @@ const StandaloneCostingContent: React.FC = () => {
       },
       {
         id: 'procedures',
-        label: '시술 · 결과',
+        label: '시술 관리',
         render: (
-          <div className="space-y-6">
-            <ProcedureManagementSection />
-            <ProcedureResultsSection />
-          </div>
+          <ProcedureManagementSection
+            editProcedureId={editProcedureId}
+            onEditComplete={() => setEditProcedureId(null)}
+          />
         ),
+      },
+      {
+        id: 'catalog',
+        label: '시술 카탈로그',
+        render: (
+          <ProcedureCatalogSection
+            onEdit={(procedureId) => {
+              setEditProcedureId(procedureId);
+              setActiveTab('procedures');
+            }}
+          />
+        ),
+        completion: () => state.procedures.length > 0,
+        incompleteMessage: '시술을 먼저 등록하세요.',
+      },
+      {
+        id: 'results',
+        label: '결과 대시보드',
+        render: <ProcedureResultsSection />,
+        completion: () => state.procedures.length > 0,
+        incompleteMessage: '시술을 먼저 등록하세요.',
       },
       {
         id: 'marketing',

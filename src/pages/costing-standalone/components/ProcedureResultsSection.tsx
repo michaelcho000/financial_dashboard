@@ -2,6 +2,8 @@
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw, formatPercentage } from '../../../utils/formatters';
 import { summarizeFixedCosts } from '../../../services/standaloneCosting/calculations';
+import StatCard from './StatCard';
+import MarginChart from './MarginChart';
 
 const ProcedureResultsSection: React.FC = () => {
   const { state } = useStandaloneCosting();
@@ -58,36 +60,49 @@ const ProcedureResultsSection: React.FC = () => {
       </header>
 
       <div className="grid gap-3 md:grid-cols-5">
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
-          <p className="text-xs font-semibold text-gray-500">월 시설·운영비</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(facilityTotal)}</p>
-          <p className="mt-1 text-xs text-gray-500">시술 시간에 비례해 분배되는 금액입니다.</p>
-        </div>
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
-          <p className="text-xs font-semibold text-gray-500">월 공통비용</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(commonTotal)}</p>
-          <p className="mt-1 text-xs text-gray-500">시나리오 탭에서 손익을 검토합니다.</p>
-        </div>
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
-          <p className="text-xs font-semibold text-gray-500">월 마케팅 비용</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">{formatKrw(marketingTotal)}</p>
-          <p className="mt-1 text-xs text-gray-500">인사이트 탭에서 증감 시뮬레이션을 진행합니다.</p>
-        </div>
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
-          <p className="text-xs font-semibold text-gray-500">평균 마진율</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">
-            {summary.avgMarginRate !== null ? formatPercentage(summary.avgMarginRate) : '-'}
-          </p>
-          <p className="mt-1 text-xs text-gray-500">등록된 시술의 마진율 평균입니다.</p>
-        </div>
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm">
-          <p className="text-xs font-semibold text-gray-500">최소 손익분기 건수</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">
-            {summary.minBreakeven !== null ? `${summary.minBreakeven.toLocaleString('ko-KR')}건` : '계산 불가'}
-          </p>
-          <p className="mt-1 text-xs text-gray-500">손익분기 계산이 가능한 시술 중 최솟값입니다.</p>
-        </div>
+        <StatCard
+          title="월 시설·운영비"
+          value={formatKrw(facilityTotal)}
+          description="시술 시간에 비례해 분배되는 금액입니다."
+        />
+        <StatCard
+          title="월 공통비용"
+          value={formatKrw(commonTotal)}
+          description="시나리오 탭에서 손익을 검토합니다."
+        />
+        <StatCard
+          title="월 마케팅 비용"
+          value={formatKrw(marketingTotal)}
+          description="인사이트 탭에서 증감 시뮬레이션을 진행합니다."
+        />
+        <StatCard
+          title="평균 마진율"
+          value={summary.avgMarginRate !== null ? formatPercentage(summary.avgMarginRate) : '-'}
+          description="등록된 시술의 마진율 평균입니다."
+          variant="info"
+        />
+        <StatCard
+          title="최소 손익분기 건수"
+          value={summary.minBreakeven !== null ? `${summary.minBreakeven.toLocaleString('ko-KR')}건` : '계산 불가'}
+          description="손익분기 계산이 가능한 시술 중 최솟값입니다."
+          variant="info"
+        />
       </div>
+
+      {/* 마진율 차트 추가 */}
+      {rows.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">
+            시술별 마진율 비교
+          </h3>
+          <MarginChart
+            data={rows.map(({ procedure, breakdown }) => ({
+              name: procedure?.name || '삭제된 시술',
+              marginRate: breakdown.marginRate,
+            }))}
+          />
+        </div>
+      )}
 
       <div className="mt-6 overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">

@@ -5,6 +5,7 @@ import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw, formatPercentage } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import HelpTooltip from './HelpTooltip';
 
 interface ProcedureFormState {
   id: string | null;
@@ -57,7 +58,12 @@ const normalizeNotes = (value: string | null | undefined): string => {
   return value.replace(/\r\n/g, '\n').replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
 };
 
-const ProcedureManagementSection: React.FC = () => {
+interface ProcedureManagementSectionProps {
+  editProcedureId?: string | null;
+  onEditComplete?: () => void;
+}
+
+const ProcedureManagementSection: React.FC<ProcedureManagementSectionProps> = ({ editProcedureId, onEditComplete }) => {
   const { state, upsertProcedure, removeProcedure } = useStandaloneCosting();
   const [form, setForm] = useState<ProcedureFormState>(emptyProcedureForm);
   const [staffAssignments, setStaffAssignments] = useState<AssignmentFormState[]>([]);
@@ -68,6 +74,28 @@ const ProcedureManagementSection: React.FC = () => {
   const [newMaterialQuantity, setNewMaterialQuantity] = useState<string>('1');
   const [pendingProcedure, setPendingProcedure] = useState<ProcedureFormValues | null>(null);
   const [warnNoMaterial, setWarnNoMaterial] = useState(false);
+
+  // 카탈로그에서 편집 버튼 클릭 시 해당 시술 로드
+  useEffect(() => {
+    if (editProcedureId) {
+      const procedure = state.procedures.find(p => p.id === editProcedureId);
+      if (procedure) {
+        setForm({
+          id: procedure.id,
+          name: procedure.name,
+          price: String(procedure.price ?? ''),
+          treatmentMinutes: String(procedure.treatmentMinutes ?? ''),
+          totalMinutes: String(procedure.totalMinutes ?? ''),
+          notes: normalizeNotes(procedure.notes),
+        });
+        setStaffAssignments(procedure.staffAssignments.map(item => ({ staffId: item.staffId, minutes: String(item.minutes) })));
+        setMaterialUsages(procedure.materialUsages.map(item => ({ materialId: item.materialId, quantity: String(item.quantity) })));
+      }
+      if (onEditComplete) {
+        onEditComplete();
+      }
+    }
+  }, [editProcedureId, state.procedures, onEditComplete]);
 
   useEffect(() => {
     if (newStaffId && !state.staff.some(candidate => candidate.id === newStaffId)) {
@@ -290,7 +318,10 @@ const ProcedureManagementSection: React.FC = () => {
           </label>
 
           <label className="flex flex-col gap-1 text-sm text-gray-700">
-            시술 소요시간 (분)
+            <div className="flex items-center justify-between">
+              <span>시술 소요시간 (분)</span>
+              <HelpTooltip content="실제 시술만 하는 시간입니다. 마진 분석 참고용으로 사용됩니다." />
+            </div>
             <input
               name="treatmentMinutes"
               type="number"
@@ -299,19 +330,28 @@ const ProcedureManagementSection: React.FC = () => {
               onChange={handleChange}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
+            <span className="text-xs text-gray-500">
+              실제 시술만 하는 시간 (마진 분석 참고용)
+            </span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm text-gray-700">
-            총 체류시간 (분)
+            <div className="flex items-center justify-between">
+              <span>총 체류시간 (분)</span>
+              <HelpTooltip content="상담+준비+시술+정리 전체 시간입니다. 고정비 배분은 이 값을 기준으로 계산됩니다." />
+            </div>
             <input
               name="totalMinutes"
               type="number"
               min={0}
               value={form.totalMinutes}
               onChange={handleChange}
-              placeholder="총 체류시간이 시술 소요시간과 같다면 비워두세요"
+              placeholder="비워두면 시술 소요시간과 동일하게 설정됩니다"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
+            <span className="text-xs text-gray-500">
+              상담+준비+시술+정리 (고정비 배분 기준)
+            </span>
           </label>
 
           <label className="md:col-span-2 flex flex-col gap-1 text-sm text-gray-700">

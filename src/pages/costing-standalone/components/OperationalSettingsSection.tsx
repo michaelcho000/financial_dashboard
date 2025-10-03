@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { calculateOperationalMinutes } from '../../../services/standaloneCosting/calculations';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
+import Alert from './Alert';
+import HelpTooltip from './HelpTooltip';
 
 interface FormState {
   operatingDays: string;
@@ -101,10 +103,7 @@ const OperationalSettingsSection: React.FC = () => {
           />
         </label>
 
-        <div className="md:col-span-2 flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            월 가용 시간: <span className="font-semibold text-gray-900">{capacityMinutes.toLocaleString('ko-KR')}분</span>
-          </div>
+        <div className="md:col-span-2 flex justify-end">
           <button
             type="submit"
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -113,6 +112,33 @@ const OperationalSettingsSection: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* 경고 UI (capacityMinutes === 0일 때만 표시) */}
+      {capacityMinutes === 0 && (
+        <div className="mt-4">
+          <Alert variant="warning" title="운영 세팅이 설정되지 않았습니다">
+            <p>
+              월 영업일수와 1일 영업시간을 입력해야 고정비 배분이 계산됩니다.
+              현재는 고정비가 시술 원가에 반영되지 않습니다.
+            </p>
+          </Alert>
+        </div>
+      )}
+
+      {/* 계산 결과 표시 (capacityMinutes > 0일 때) */}
+      {capacityMinutes > 0 && (
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-blue-800">
+              월 가용 시간: <strong>{capacityMinutes.toLocaleString('ko-KR')}분</strong>
+            </p>
+            <HelpTooltip content="이 값을 기준으로 고정비가 시술별로 배분됩니다." />
+          </div>
+          <p className="mt-1 text-xs text-blue-700">
+            고정비 분당 배분율 = 월 시설·운영비 / {capacityMinutes.toLocaleString('ko-KR')}분
+          </p>
+        </div>
+      )}
     </section>
   );
 };

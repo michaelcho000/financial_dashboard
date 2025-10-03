@@ -31,7 +31,10 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(git rev-list:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(npx tsx:*)"
     ],
     "deny": [],
     "ask": []

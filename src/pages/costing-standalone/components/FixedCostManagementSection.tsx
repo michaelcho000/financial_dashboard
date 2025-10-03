@@ -4,6 +4,7 @@ import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
 import { calculateMonthlyFixedTotal, summarizeFixedCosts } from '../../../services/standaloneCosting/calculations';
+import HelpTooltip from './HelpTooltip';
 
 interface FixedCostFormState {
   id: string | null;
@@ -15,20 +16,29 @@ interface FixedCostFormState {
 
 const GROUP_ORDER: FixedCostGroup[] = ['facility', 'common', 'marketing'];
 
-const GROUP_CONFIG: Record<FixedCostGroup, { label: string; description: string; examples: string[] }> = {
+const GROUP_CONFIG: Record<FixedCostGroup, { label: string; badge: string; badgeColor: string; description: string; help: string; examples: string[] }> = {
   facility: {
     label: '시설·운영비',
-    description: '영업시간에 비례해 시술 원가에 배분되는 항목입니다.',
+    badge: '자동 배분',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+    description: '영업시간에 비례해 시술 원가에 자동 배분되는 항목입니다.',
+    help: '월 가용시간으로 나눠 시술별 시간에 비례해 배분됩니다.',
     examples: ['임대료', '관리비', '장비 리스료', '전기·수도'],
   },
   common: {
     label: '공통비용',
+    badge: '배분 안 함',
+    badgeColor: 'bg-gray-100 text-gray-800 border-gray-200',
     description: '시간과 무관하게 발생하며 손익 시나리오에서 커버해야 할 항목입니다.',
+    help: '전체 매출 대비로 별도 검토합니다. 시술 원가에는 포함되지 않습니다.',
     examples: ['보험료', '카드 수수료', 'CRM 사용료', '회계·노무 비용'],
   },
   marketing: {
     label: '마케팅 비용',
+    badge: 'ROI 분석용',
+    badgeColor: 'bg-green-100 text-green-800 border-green-200',
     description: '시나리오/인사이트 탭에서 조정되는 마케팅 지출입니다.',
+    help: '마케팅 인사이트에서 증감 시뮬레이션합니다. 시술 원가에는 포함되지 않습니다.',
     examples: ['디지털 광고', '오프라인 광고', '프로모션 이벤트'],
   },
 };
@@ -123,10 +133,16 @@ const FixedCostManagementSection: React.FC = () => {
     const subtotal = calculateMonthlyFixedTotal(state.fixedCosts, group);
     const config = GROUP_CONFIG[group];
     return (
-      <div key={group} className="mt-8 first:mt-0">
+      <div key={group}>
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">{config.label}</h3>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-gray-900">{config.label}</h3>
+              <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded border ${config.badgeColor}`}>
+                {config.badge}
+              </span>
+              <HelpTooltip content={config.help} />
+            </div>
             <p className="mt-1 text-sm text-gray-600">{config.description}</p>
           </div>
           <div className="text-sm text-gray-600">
@@ -142,8 +158,7 @@ const FixedCostManagementSection: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
-
-                <th className="px-4 py-2 text-right font-medium text-gray-500">월 금액</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-500">월 금액 (원)</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
                 <th className="px-4 py-2" />
               </tr>
@@ -297,8 +312,8 @@ const FixedCostManagementSection: React.FC = () => {
         </div>
       </form>
 
-      <div className="mt-8 space-y-8">
-        {GROUP_ORDER.map(group => renderGroupTable(group))}
+      <div className="mt-6">
+        {renderGroupTable(activeGroup)}
       </div>
     </section>
   );

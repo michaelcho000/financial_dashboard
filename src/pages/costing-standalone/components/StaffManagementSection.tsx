@@ -199,9 +199,9 @@ const StaffManagementSection: React.FC = () => {
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">역할</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">월 급여</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">월 근무 분</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">분당 인건비</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500">월 급여 (원)</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500">월 근무 시간 (분)</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500">분당 인건비 (원/분)</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
               <th className="px-4 py-2" />
             </tr>

@@ -128,7 +128,7 @@ const MaterialManagementSection: React.FC = () => {
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-gray-700">
-          기본 단위 수량
+          구매 단위 수량
           <input
             name="unitQuantity"
             type="number"
@@ -138,10 +138,11 @@ const MaterialManagementSection: React.FC = () => {
             placeholder="예: 2400"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
+          <span className="text-xs text-gray-500">1회 구매 시 포함된 수량</span>
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-gray-700">
-          기본 단위 금액 (원)
+          구매 가격 (원)
           <input
             name="unitPrice"
             type="number"
@@ -151,6 +152,7 @@ const MaterialManagementSection: React.FC = () => {
             placeholder="예: 3500000"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
+          <span className="text-xs text-gray-500">구매 단위 수량에 대한 가격</span>
         </label>
 
         <label className="md:col-span-3 flex flex-col gap-1 text-sm text-gray-700">
@@ -188,9 +190,9 @@ const MaterialManagementSection: React.FC = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">단위</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">기본 단위 금액</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">단위당 금액</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">구매 단위</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500">구매 가격 (원)</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500">단위당 원가 (원)</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
               <th className="px-4 py-2" />
             </tr>
