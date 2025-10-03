@@ -147,29 +147,54 @@ const StandaloneCostingContent: React.FC = () => {
         </p>
       </section>
 
-      <nav className="flex flex-wrap gap-2">
-        {tabs.map((tab, index) => {
-          const isActive = tab.id === activeTabDefinition.id;
-          const prerequisiteSatisfied =
-            index === 0 || tabs.slice(0, index).every(step => !step.completion || step.completion());
+      <nav className="overflow-x-auto">
+        <div className="flex items-center justify-between min-w-max px-2 py-4">
+          {tabs.map((tab, index) => {
+            const isActive = tab.id === activeTabDefinition.id;
+            const prerequisiteSatisfied =
+              index === 0 || tabs.slice(0, index).every(step => !step.completion || step.completion());
+            const isCompleted = prerequisiteSatisfied && !isActive;
 
-          const baseClasses =
-            'rounded-md border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-100';
-          const activeClasses = 'border-blue-600 bg-blue-600 text-white shadow-sm';
-          const inactiveClasses = 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50';
-          const pendingClasses = prerequisiteSatisfied ? '' : 'opacity-60';
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => handleTabSelect(tab.id)}
-              className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses} ${pendingClasses}`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+            return (
+              <React.Fragment key={tab.id}>
+                <button
+                  type="button"
+                  onClick={() => handleTabSelect(tab.id)}
+                  className={`flex flex-col items-center flex-shrink-0 transition-opacity ${
+                    prerequisiteSatisfied ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+                      isActive
+                        ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                        : isCompleted
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-500'
+                    }`}
+                  >
+                    {index + 1}
+                  </div>
+                  <span
+                    className={`mt-2 text-xs font-medium whitespace-nowrap ${
+                      isActive ? 'text-blue-700' : isCompleted ? 'text-blue-600' : 'text-gray-500'
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </button>
+                {index < tabs.length - 1 && (
+                  <div
+                    className={`flex-1 h-0.5 mx-3 transition-colors ${
+                      isCompleted ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
+                    style={{ marginBottom: '40px' }}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </nav>
 
       <div>{activeTabDefinition.render}</div>
