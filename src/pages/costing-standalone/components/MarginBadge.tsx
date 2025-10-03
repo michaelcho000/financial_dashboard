@@ -6,16 +6,22 @@ interface MarginBadgeProps {
 
 const MarginBadge: React.FC<MarginBadgeProps> = ({ marginRate }) => {
   const getStatusConfig = (rate: number) => {
-    if (rate >= 40) {
+    if (rate >= 50) {
       return {
-        text: '양호',
+        text: '우수',
         className: 'bg-blue-100 text-blue-800 border-blue-200'
       };
     }
     if (rate >= 30) {
       return {
-        text: '개선 필요',
-        className: 'bg-amber-100 text-amber-800 border-amber-200'
+        text: '양호',
+        className: 'bg-blue-50 text-blue-600 border-blue-100'
+      };
+    }
+    if (rate >= 0) {
+      return {
+        text: '관심',
+        className: 'bg-blue-50 text-blue-400 border-blue-100'
       };
     }
     return {

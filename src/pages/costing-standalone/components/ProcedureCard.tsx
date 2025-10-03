@@ -53,9 +53,13 @@ const ProcedureCard: React.FC<ProcedureCardProps> = ({
               <span className="text-gray-600">마진율</span>
               <div className="flex items-center gap-2">
                 <span className={`font-semibold ${
-                  breakdown.marginRate >= 40 ? 'text-blue-600' :
-                  breakdown.marginRate >= 30 ? 'text-amber-600' :
-                  'text-red-600'
+                  breakdown.marginRate >= 50
+                    ? 'text-blue-700'
+                    : breakdown.marginRate >= 30
+                    ? 'text-blue-500'
+                    : breakdown.marginRate >= 0
+                    ? 'text-blue-300'
+                    : 'text-red-600'
                 }`}>
                   {formatPercentage(breakdown.marginRate)}
                 </span>

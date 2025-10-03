@@ -159,6 +159,11 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
   }
 };
 
+interface ProcedureEditorController {
+  isOpen: boolean;
+  procedureId: string | null;
+}
+
 interface StandaloneCostingContextValue {
   state: StandaloneCostingState;
   setOperationalConfig: (payload: OperationalConfig) => void;
@@ -175,6 +180,9 @@ interface StandaloneCostingContextValue {
   removeProcedure: (id: string) => void;
   resetAll: () => void;
   hydrated: boolean;
+  openProcedureEditor: (procedureId?: string | null) => void;
+  closeProcedureEditor: () => void;
+  procedureEditor: ProcedureEditorController;
 }
 
 const StandaloneCostingContext = createContext<StandaloneCostingContextValue | null>(null);
@@ -184,6 +192,7 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
   const hydratedRef = useRef(false);
   const migrationNoticeRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
+  const [procedureEditor, setProcedureEditor] = useState<ProcedureEditorController>({ isOpen: false, procedureId: null });
 
   useEffect(() => {
     if (hydratedRef.current) {
@@ -290,6 +299,14 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     dispatch({ type: 'RESET' });
   }, []);
 
+  const openProcedureEditor = useCallback((procedureId?: string | null) => {
+    setProcedureEditor({ isOpen: true, procedureId: procedureId ?? null });
+  }, []);
+
+  const closeProcedureEditor = useCallback(() => {
+    setProcedureEditor({ isOpen: false, procedureId: null });
+  }, []);
+
   const value = useMemo<StandaloneCostingContextValue>(() => ({
     state,
     setOperationalConfig,
@@ -306,6 +323,9 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     removeProcedure,
     resetAll,
     hydrated,
+    openProcedureEditor,
+    closeProcedureEditor,
+    procedureEditor,
   }), [
     state,
     setOperationalConfig,
@@ -322,6 +342,9 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     removeProcedure,
     resetAll,
     hydrated,
+    openProcedureEditor,
+    closeProcedureEditor,
+    procedureEditor,
   ]);
 
   return (
@@ -338,9 +361,5 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
-
-
-
-
 
 

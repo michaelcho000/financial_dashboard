@@ -24,9 +24,13 @@ const MarginChart: React.FC<MarginChartProps> = ({ data }) => {
       {data.map((item, index) => {
         const percentage = (item.marginRate / maxRate) * 100;
         const color =
-          item.marginRate >= 40 ? 'bg-blue-600' :
-          item.marginRate >= 30 ? 'bg-amber-600' :
-          'bg-red-600';
+          item.marginRate >= 50
+            ? 'bg-blue-700'
+            : item.marginRate >= 30
+            ? 'bg-blue-500'
+            : item.marginRate >= 0
+            ? 'bg-blue-300'
+            : 'bg-red-600';
 
         return (
           <div key={index} className="flex items-center gap-3">

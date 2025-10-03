@@ -8,6 +8,7 @@ import ProcedureManagementSection from './components/ProcedureManagementSection'
 import ProcedureResultsSection from './components/ProcedureResultsSection';
 import ProcedureCatalogSection from './components/ProcedureCatalogSection';
 import MarketingInsightsSection from './components/MarketingInsightsSection';
+import ProcedureEditorModal from './components/ProcedureEditorModal';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
 
 interface TabDefinition {
@@ -22,7 +23,6 @@ const StandaloneCostingContent: React.FC = () => {
   const { hydrated, state } = useStandaloneCosting();
   const [activeTab, setActiveTab] = useState<string>('operational');
   const [modalMessage, setModalMessage] = useState<string | null>(null);
-  const [editProcedureId, setEditProcedureId] = useState<string | null>(null);
 
   const hasOperationalConfig = useMemo(
     () => state.operational.operatingDays !== null && state.operational.operatingHoursPerDay !== null,
@@ -66,24 +66,12 @@ const StandaloneCostingContent: React.FC = () => {
       {
         id: 'procedures',
         label: '시술 관리',
-        render: (
-          <ProcedureManagementSection
-            editProcedureId={editProcedureId}
-            onEditComplete={() => setEditProcedureId(null)}
-          />
-        ),
+        render: <ProcedureManagementSection />,
       },
       {
         id: 'catalog',
         label: '시술 카탈로그',
-        render: (
-          <ProcedureCatalogSection
-            onEdit={(procedureId) => {
-              setEditProcedureId(procedureId);
-              setActiveTab('procedures');
-            }}
-          />
-        ),
+        render: <ProcedureCatalogSection />,
         completion: () => state.procedures.length > 0,
         incompleteMessage: '시술을 먼저 등록하세요.',
       },
@@ -139,6 +127,7 @@ const StandaloneCostingContent: React.FC = () => {
   const activeTabDefinition = tabs[safeIndex];
 
   return (
+    <>
     <div className="space-y-6">
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-gray-900">시술 원가 계산</h1>
@@ -211,6 +200,9 @@ const StandaloneCostingContent: React.FC = () => {
         message={modalMessage ?? ''}
       />
     </div>
+
+    <ProcedureEditorModal />
+    </>
   );
 };
 

@@ -4,12 +4,8 @@ import { ProcedureFormValues } from '../../../services/standaloneCosting/types';
 import { generateId } from '../../../utils/id';
 import ProcedureCard from './ProcedureCard';
 
-interface ProcedureCatalogSectionProps {
-  onEdit: (procedureId: string) => void;
-}
-
-const ProcedureCatalogSection: React.FC<ProcedureCatalogSectionProps> = ({ onEdit }) => {
-  const { state, upsertProcedure } = useStandaloneCosting();
+const ProcedureCatalogSection: React.FC = () => {
+  const { state, upsertProcedure, openProcedureEditor } = useStandaloneCosting();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'margin' | 'marginRate'>('name');
   const [filterBy, setFilterBy] = useState<'all' | 'high' | 'medium' | 'low'>('all');
@@ -65,7 +61,7 @@ const ProcedureCatalogSection: React.FC<ProcedureCatalogSectionProps> = ({ onEdi
   }, [proceduresWithBreakdowns, searchQuery, filterBy, sortBy]);
 
   const handleEdit = (procedure: ProcedureFormValues) => {
-    onEdit(procedure.id);
+    openProcedureEditor(procedure.id);
   };
 
   const handleDuplicate = (procedure: ProcedureFormValues) => {
