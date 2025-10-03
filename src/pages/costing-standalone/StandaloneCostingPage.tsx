@@ -142,25 +142,58 @@ const StandaloneCostingContent: React.FC = () => {
             const isActive = tab.id === activeTabDefinition.id;
             const prerequisiteSatisfied =
               index === 0 || tabs.slice(0, index).every(step => !step.completion || step.completion());
+            const isLocked = !prerequisiteSatisfied;
             const isCompleted = prerequisiteSatisfied && !isActive;
+
+            const circleClasses = (() => {
+              if (isActive) {
+                return 'bg-blue-600 text-white ring-4 ring-blue-200 shadow-sm';
+              }
+              if (isCompleted) {
+                return 'bg-white text-blue-600 border border-blue-600';
+              }
+              if (!isLocked) {
+                return 'bg-white text-gray-600 border border-blue-600';
+              }
+              return 'bg-white text-gray-400 border border-blue-600';
+            })();
+
+            const labelClasses = (() => {
+              if (isActive) {
+                return 'text-blue-700 font-semibold';
+              }
+              if (isCompleted) {
+                return 'text-gray-700 font-medium';
+              }
+              if (!isLocked) {
+                return 'text-gray-500';
+              }
+              return 'text-gray-400';
+            })();
+
+            const buttonStateClasses = isLocked
+              ? 'cursor-not-allowed opacity-50'
+              : 'cursor-pointer hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200';
+
+            const connectorClasses = (() => {
+              if (isCompleted) {
+                return 'bg-blue-600';
+              }
+              if (!isLocked) {
+                return 'bg-blue-200';
+              }
+              return 'bg-blue-50';
+            })();
 
             return (
               <React.Fragment key={tab.id}>
                 <button
                   type="button"
                   onClick={() => handleTabSelect(tab.id)}
-                  className={`flex flex-col items-center flex-shrink-0 transition-opacity ${
-                    prerequisiteSatisfied ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-60'
-                  }`}
+                  className={`flex flex-col items-center flex-shrink-0 transition-opacity ${buttonStateClasses}`}
                 >
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-                      isActive
-                        ? 'bg-blue-600 text-white ring-4 ring-blue-100'
-                        : isCompleted
-                        ? 'border border-blue-600 bg-white text-blue-600'
-                        : 'bg-gray-200 text-gray-500'
-                    }`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${circleClasses}`}
                   >
                     {isCompleted ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,20 +203,14 @@ const StandaloneCostingContent: React.FC = () => {
                       index + 1
                     )}
                   </div>
-                  <span
-                    className={`mt-2 text-xs font-medium whitespace-nowrap ${
-                      isActive ? 'text-gray-900' : isCompleted ? 'text-gray-600' : 'text-gray-400'
-                    }`}
-                  >
+                  <span className={`mt-2 text-xs whitespace-nowrap ${labelClasses}`}>
                     {tab.label}
                   </span>
                 </button>
                 {index < tabs.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-3 transition-colors ${
-                      isCompleted ? 'bg-blue-600' : 'bg-gray-200'
-                    }`}
-                    style={{ marginBottom: '40px' }}
+                    className={`flex-1 h-px mx-3 transition-colors self-center ${connectorClasses}`}
+                    style={{ marginTop: '-28px' }}
                   />
                 )}
               </React.Fragment>

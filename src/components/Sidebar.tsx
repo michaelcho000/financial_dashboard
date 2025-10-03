@@ -6,6 +6,8 @@ import { DocumentIcon } from './icons/DocumentIcon';
 import { ClipboardListIcon } from './icons/ClipboardListIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
+import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { DollarSignIcon } from './icons/DollarSignIcon';
 import { useAuth } from '../contexts/AuthContext';
 import HospitalSwitcher from './HospitalSwitcher';
 import MonthManagementModal from './modals/MonthManagementModal';
@@ -21,13 +23,13 @@ const buildStaffNavItems = (): NavItem[] => {
   const items: NavItem[] = [
     { icon: <HomeIcon />, label: '대시보드', path: '/dashboard' },
     { icon: <ChartIcon />, label: '손익', path: '/income-statement' },
-    { icon: <DocumentIcon />, label: '고정비', path: '/fixed-costs' },
+    { icon: <DollarSignIcon />, label: '고정비', path: '/fixed-costs' },
     { icon: <ClipboardListIcon />, label: '계정 관리', path: '/account-management' },
     { icon: <DocumentIcon />, label: '월간 리포트', path: '/reports' },
   ];
 
   if (featureFlags.costingModule) {
-    items.splice(2, 0, { icon: <DocumentIcon />, label: '원가 인사이트', path: '/costing' });
+    items.splice(2, 0, { icon: <TrendingUpIcon />, label: '원가 인사이트', path: '/costing' });
   }
 
   return items;
