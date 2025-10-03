@@ -148,7 +148,7 @@ const StandaloneCostingContent: React.FC = () => {
       </section>
 
       <nav className="overflow-x-auto">
-        <div className="flex items-center justify-between min-w-max px-2 py-4">
+        <div className="flex items-center justify-between min-w-max max-w-5xl mx-auto px-8 py-4">
           {tabs.map((tab, index) => {
             const isActive = tab.id === activeTabDefinition.id;
             const prerequisiteSatisfied =
