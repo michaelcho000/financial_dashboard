@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import NotificationModal from '../../components/common/NotificationModal';
-import OperationalSettingsSection from './components/OperationalSettingsSection';
-import EquipmentManagementSection from './components/EquipmentManagementSection';
+import OperationalAndEquipmentSection from './components/OperationalAndEquipmentSection';
 import StaffManagementSection from './components/StaffManagementSection';
 import MaterialManagementSection from './components/MaterialManagementSection';
 import FixedCostManagementSection from './components/FixedCostManagementSection';
@@ -35,12 +34,7 @@ const StandaloneCostingContent: React.FC = () => {
       {
         id: 'operational',
         label: '운영 세팅',
-        render: (
-          <div className="space-y-6">
-            <OperationalSettingsSection />
-            <EquipmentManagementSection />
-          </div>
-        ),
+        render: <OperationalAndEquipmentSection />,
         completion: () => hasOperationalConfig,
         incompleteMessage: '운영 세팅을 먼저 저장하세요.',
       },
