@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { calculateOperationalMinutes } from '../../../services/standaloneCosting/calculations';
+import { calculateOperationalMinutes, calculateMonthlyFixedTotal } from '../../../services/standaloneCosting/calculations';
 import { EquipmentProfile } from '../../../services/standaloneCosting/types';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw, formatNumberInput, parseNumberInput } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
 import Alert from './Alert';
-import HelpTooltip from './HelpTooltip';
 import Modal from '../../../components/common/Modal';
 
 interface OperationalFormState {
@@ -54,6 +53,16 @@ const OperationalAndEquipmentSection: React.FC = () => {
   }, [state.operational]);
 
   const capacityMinutes = useMemo(() => calculateOperationalMinutes(state.operational), [state.operational]);
+
+  const facilityFixedCost = useMemo(
+    () => calculateMonthlyFixedTotal(state.fixedCosts, 'facility'),
+    [state.fixedCosts]
+  );
+
+  const perMinuteCost = useMemo(() => {
+    if (capacityMinutes === 0) return 0;
+    return facilityFixedCost / capacityMinutes;
+  }, [facilityFixedCost, capacityMinutes]);
 
   // Operational handlers
   const handleOperationalChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -149,52 +158,56 @@ const OperationalAndEquipmentSection: React.FC = () => {
   return (
     <>
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <header className="mb-4 flex items-center justify-between">
+        <header className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">운영 및 장비 설정</h2>
-            <p className="mt-1 text-sm text-gray-600">월 가용 시간을 정의하고, 장비 상세 모드를 설정합니다.</p>
+            <h2 className="text-lg font-semibold text-gray-900">운영 세팅 요약</h2>
+            <p className="mt-1 text-sm text-gray-600">월 가용 시간과 고정비 배분율을 확인하세요.</p>
           </div>
           <button
             onClick={openOperationalModal}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            ⚙️ 수정
+            수정
           </button>
         </header>
 
-        {/* 3칼럼 그리드: 영업일수, 영업시간, 장비 모드 */}
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800">월 영업일수</p>
-            <p className="mt-1 text-2xl font-bold text-blue-900">
-              {state.operational.operatingDays ?? '-'}일
+        {/* 4칸 KPI 그리드 */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-center shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">영업일수</p>
+            <p className="mt-2 text-3xl font-bold text-gray-900">
+              {state.operational.operatingDays ?? '-'}
+              {state.operational.operatingDays !== null && <span className="text-lg text-gray-600 ml-1">일</span>}
             </p>
           </div>
-          <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800">일 영업시간</p>
-            <p className="mt-1 text-2xl font-bold text-blue-900">
-              {state.operational.operatingHoursPerDay ?? '-'}시간
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-center shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">영업시간</p>
+            <p className="mt-2 text-3xl font-bold text-gray-900">
+              {state.operational.operatingHoursPerDay ?? '-'}
+              {state.operational.operatingHoursPerDay !== null && <span className="text-lg text-gray-600 ml-1">시간</span>}
             </p>
           </div>
-          <div className="rounded-md border border-gray-100 bg-gray-50 p-4">
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <p className="text-sm font-medium text-gray-800">장비 상세 모드</p>
-                <p className="text-xs text-gray-600 mt-0.5">(준비 중)</p>
-              </div>
-              <input
-                type="checkbox"
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                checked={state.useEquipmentHierarchy}
-                onChange={handleEquipmentToggle}
-              />
-            </label>
+
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center shadow-sm">
+            <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">가용 시간</p>
+            <p className="mt-2 text-3xl font-bold text-blue-900">
+              {capacityMinutes > 0 ? capacityMinutes.toLocaleString('ko-KR') : '-'}
+              {capacityMinutes > 0 && <span className="text-lg text-blue-700 ml-1">분</span>}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center shadow-sm">
+            <p className="text-xs font-medium text-green-700 uppercase tracking-wide">분당 비용</p>
+            <p className="mt-2 text-3xl font-bold text-green-900">
+              {capacityMinutes > 0 ? formatKrw(Math.round(perMinuteCost)) : '-'}
+            </p>
           </div>
         </div>
 
         {state.operational.notes && (
-          <div className="mt-3">
-            <p className="text-xs text-gray-500">메모</p>
+          <div className="mt-4 rounded-md bg-gray-50 p-3">
+            <p className="text-xs font-medium text-gray-500">메모</p>
             <p className="mt-1 text-sm text-gray-700">{state.operational.notes}</p>
           </div>
         )}
@@ -211,46 +224,47 @@ const OperationalAndEquipmentSection: React.FC = () => {
           </div>
         )}
 
-        {/* 계산 결과 표시 (capacityMinutes > 0일 때) */}
-        {capacityMinutes > 0 && (
-          <div className="mt-4 rounded-md border border-green-200 bg-green-50 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-800">월 가용 시간</p>
-                <p className="mt-1 text-xl font-bold text-green-900">
-                  {capacityMinutes.toLocaleString('ko-KR')}분
-                </p>
-              </div>
-              <HelpTooltip content="이 값을 기준으로 고정비가 시술별로 배분됩니다." />
-            </div>
-            <p className="mt-2 text-xs text-green-700">
-              고정비 분당 배분율 = 월 시설·운영비 / {capacityMinutes.toLocaleString('ko-KR')}분
-            </p>
-          </div>
-        )}
+      </section>
 
-        {/* 장비 모드 ON일 때만 표시 */}
-        {state.useEquipmentHierarchy && (
+      {/* 장비 상세 모드 섹션 */}
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <header className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">장비 상세 모드</h2>
+              <p className="mt-1 text-sm text-gray-600">장비별 리스료를 관리합니다 (준비 중).</p>
+            </div>
+            <label className="inline-flex items-center">
+              <input
+                type="checkbox"
+                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                checked={state.useEquipmentHierarchy}
+                onChange={handleEquipmentToggle}
+              />
+              <span className="ml-2 text-sm text-gray-700">활성화</span>
+            </label>
+          </div>
+          {state.useEquipmentHierarchy && (
+            <button
+              onClick={openEquipmentModal}
+              className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              + 장비 추가
+            </button>
+          )}
+        </header>
+
+        {state.useEquipmentHierarchy ? (
           <>
-            <div className="mt-6 rounded-md border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              <p className="font-medium">장비 상세 모드 안내</p>
+            <div className="mb-4 rounded-md border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              <p className="font-medium">안내</p>
               <p className="mt-1">
                 장비별 리스료와 소모품을 연결해 원가를 정밀 배분하는 기능입니다. 현재는 설계 단계로, 입력된 정보는 곧바로 계산에 반영되지 않습니다.
                 추후 업데이트에서 활성화될 예정입니다.
               </p>
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">등록된 장비</h3>
-              <button
-                onClick={openEquipmentModal}
-                className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                + 장비 추가
-              </button>
-            </div>
-
-            <div className="mt-3 overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -298,6 +312,10 @@ const OperationalAndEquipmentSection: React.FC = () => {
               </table>
             </div>
           </>
+        ) : (
+          <div className="rounded-md bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+            장비 상세 모드를 활성화하면 장비별 리스료를 관리할 수 있습니다.
+          </div>
         )}
       </section>
 

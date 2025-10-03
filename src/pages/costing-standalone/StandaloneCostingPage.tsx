@@ -34,7 +34,11 @@ const StandaloneCostingContent: React.FC = () => {
       {
         id: 'operational',
         label: '운영 세팅',
-        render: <OperationalAndEquipmentSection />,
+        render: (
+          <div className="space-y-6">
+            <OperationalAndEquipmentSection />
+          </div>
+        ),
         completion: () => hasOperationalConfig,
         incompleteMessage: '운영 세팅을 먼저 저장하세요.',
       },
