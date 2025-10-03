@@ -169,11 +169,17 @@ const StandaloneCostingContent: React.FC = () => {
                       isActive
                         ? 'bg-blue-600 text-white ring-4 ring-blue-100'
                         : isCompleted
-                        ? 'bg-blue-600 text-white'
+                        ? 'border-2 border-blue-600 bg-white text-blue-600'
                         : 'bg-gray-200 text-gray-500'
                     }`}
                   >
-                    {index + 1}
+                    {isCompleted ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      index + 1
+                    )}
                   </div>
                   <span
                     className={`mt-2 text-xs font-medium whitespace-nowrap ${
