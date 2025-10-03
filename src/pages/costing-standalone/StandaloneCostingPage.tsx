@@ -10,6 +10,7 @@ import ProcedureCatalogSection from './components/ProcedureCatalogSection';
 import MarketingInsightsSection from './components/MarketingInsightsSection';
 import ProcedureEditorModal from './components/ProcedureEditorModal';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
+import CostingErrorBoundary from '../../components/common/CostingErrorBoundary';
 
 interface TabDefinition {
   id: string;
@@ -67,6 +68,8 @@ const StandaloneCostingContent: React.FC = () => {
         id: 'procedures',
         label: '시술 관리',
         render: <ProcedureManagementSection />,
+        completion: () => state.procedures.length > 0,
+        incompleteMessage: '최소 1개의 시술을 등록하세요.',
       },
       {
         id: 'catalog',
@@ -234,9 +237,11 @@ const StandaloneCostingContent: React.FC = () => {
 };
 
 const StandaloneCostingPage: React.FC = () => (
-  <StandaloneCostingProvider>
-    <StandaloneCostingContent />
-  </StandaloneCostingProvider>
+  <CostingErrorBoundary>
+    <StandaloneCostingProvider>
+      <StandaloneCostingContent />
+    </StandaloneCostingProvider>
+  </CostingErrorBoundary>
 );
 
 export default StandaloneCostingPage;
