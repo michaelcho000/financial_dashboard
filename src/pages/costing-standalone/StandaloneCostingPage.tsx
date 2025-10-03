@@ -169,7 +169,7 @@ const StandaloneCostingContent: React.FC = () => {
                       isActive
                         ? 'bg-blue-600 text-white ring-4 ring-blue-100'
                         : isCompleted
-                        ? 'border-2 border-blue-600 bg-white text-blue-600'
+                        ? 'border border-blue-600 bg-white text-blue-600'
                         : 'bg-gray-200 text-gray-500'
                     }`}
                   >
@@ -183,7 +183,7 @@ const StandaloneCostingContent: React.FC = () => {
                   </div>
                   <span
                     className={`mt-2 text-xs font-medium whitespace-nowrap ${
-                      isActive ? 'text-blue-700' : isCompleted ? 'text-blue-600' : 'text-gray-500'
+                      isActive ? 'text-gray-900' : isCompleted ? 'text-gray-600' : 'text-gray-400'
                     }`}
                   >
                     {tab.label}
