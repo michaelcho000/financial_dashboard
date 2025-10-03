@@ -22,10 +22,16 @@
       "Bash(git add:*)",
       "Bash(git push:*)",
       "Bash(git config:*)",
+      "Bash(cat:*)",
       "Bash(git log:*)",
       "Bash(pgrep:*)",
       "Bash(git commit:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(git rev-list:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

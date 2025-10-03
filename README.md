@@ -15,6 +15,11 @@ View your app in AI Studio: https://ai.studio/apps/drive/1WySWOPavI81PyhU_Bx3bwt
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Configure environment variables:
+   - Copy `.env.example` to `.env`
+   - Optionally set the `GEMINI_API_KEY` in [.env.local](.env.local)
+3. Generate Prisma client & create the local SQLite database:
+   - `npm run prisma:generate`
+   - `npm run db:push`
+4. Run the app (API 서버와 프런트 동시에 실행):
    `npm run dev`

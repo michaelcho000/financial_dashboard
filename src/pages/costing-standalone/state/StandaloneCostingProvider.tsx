@@ -189,15 +189,24 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     if (hydratedRef.current) {
       return;
     }
-    const restored = loadDraft();
-    if (restored) {
-      dispatch({ type: 'LOAD_STATE', payload: restored.state });
-      if (restored.migrated) {
-        migrationNoticeRef.current = true;
+
+    const restoreState = async () => {
+      const restored = await loadDraft();
+      if (restored) {
+        dispatch({ type: 'LOAD_STATE', payload: restored.state });
+        if (restored.migrated) {
+          migrationNoticeRef.current = true;
+        }
       }
-    }
-    hydratedRef.current = true;
-    setHydrated(true);
+      hydratedRef.current = true;
+      setHydrated(true);
+    };
+
+    restoreState().catch(error => {
+      console.error('[StandaloneCosting] Failed to restore state', error);
+      hydratedRef.current = true;
+      setHydrated(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -215,7 +224,12 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     if (!hydratedRef.current) {
       return;
     }
-    saveDraft(state);
+    const persist = async () => {
+      await saveDraft(state);
+    };
+    persist().catch(error => {
+      console.error('[StandaloneCosting] Failed to persist state', error);
+    });
   }, [state]);
 
   const setOperationalConfig = useCallback((payload: OperationalConfig) => {
@@ -267,7 +281,12 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
   }, []);
 
   const resetAll = useCallback(() => {
-    clearDraft();
+    const reset = async () => {
+      await clearDraft();
+    };
+    reset().catch(error => {
+      console.error('[StandaloneCosting] Failed to reset state', error);
+    });
     dispatch({ type: 'RESET' });
   }, []);
 
@@ -319,7 +338,6 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
-
 
 
 

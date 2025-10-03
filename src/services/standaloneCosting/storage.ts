@@ -1,9 +1,8 @@
-﻿import { FixedCostGroup, FixedCostItem, StandaloneCostingDraft, StandaloneCostingState } from './types';
+﻿import axios from 'axios';
+import { FixedCostGroup, FixedCostItem, StandaloneCostingState } from './types';
 
-const STORAGE_KEY = 'standaloneCosting.v1';
+const API_PATH = '/api/standalone-costing';
 const CURRENT_VERSION = 3;
-
-const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 export interface LoadedDraftResult {
   state: StandaloneCostingState;
@@ -71,30 +70,24 @@ const migrateState = (state: PartialState, version: number): StandaloneCostingSt
   return normalizeState(next);
 };
 
-export const loadDraft = (): LoadedDraftResult | null => {
-  if (!isBrowser) {
-    return null;
-  }
+export const loadDraft = async (): Promise<LoadedDraftResult | null> => {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as Partial<StandaloneCostingDraft> & { version?: number };
-    if (!parsed || typeof parsed !== 'object' || !parsed.state) {
+    const response = await axios.get(API_PATH);
+    const { state, version } = response.data ?? {};
+    if (!state) {
       return null;
     }
 
-    const version = typeof parsed.version === 'number' ? parsed.version : 1;
-    if (version > CURRENT_VERSION) {
+    const resolvedVersion = typeof version === 'number' ? version : 1;
+    if (resolvedVersion > CURRENT_VERSION) {
       return null;
     }
 
-    if (version === CURRENT_VERSION) {
-      return { state: normalizeState(parsed.state), migrated: false };
+    if (resolvedVersion === CURRENT_VERSION) {
+      return { state: normalizeState(state), migrated: false };
     }
 
-    const migratedState = migrateState(parsed.state, version);
+    const migratedState = migrateState(state, resolvedVersion);
     return { state: migratedState, migrated: true };
   } catch (error) {
     console.error('[StandaloneCosting] Failed to load draft', error);
@@ -102,30 +95,22 @@ export const loadDraft = (): LoadedDraftResult | null => {
   }
 };
 
-export const saveDraft = (state: StandaloneCostingState): void => {
-  if (!isBrowser) {
-    return;
-  }
+export const saveDraft = async (state: StandaloneCostingState): Promise<void> => {
   try {
-    const payload: StandaloneCostingDraft = {
+    await axios.post(API_PATH, {
       state,
       version: CURRENT_VERSION,
-    };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    });
   } catch (error) {
     console.error('[StandaloneCosting] Failed to save draft', error);
   }
 };
 
-export const clearDraft = (): void => {
-  if (!isBrowser) {
-    return;
-  }
+export const clearDraft = async (): Promise<void> => {
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    await axios.delete(API_PATH);
   } catch (error) {
     console.error('[StandaloneCosting] Failed to clear draft', error);
   }
 };
-
 

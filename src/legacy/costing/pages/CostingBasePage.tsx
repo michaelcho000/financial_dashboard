@@ -1,16 +1,17 @@
+// Deprecated: legacy costing baseline editor retained for reference only.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Table, TableHead, TableBody, TableRow, TableCell, TableHeader } from '../../components/ui/Table';
-import { useCostingBaselines } from '../../contexts/CostingBaselineContext';
-import { useFinancials } from '../../contexts/FinancialDataContext';
-import { useCostingServices } from '../../contexts/CostingServicesContext';
+import { Table, TableHead, TableBody, TableRow, TableCell, TableHeader } from '../../../components/ui/Table';
+import { useCostingBaselines } from '../../../contexts/CostingBaselineContext';
+import { useFinancials } from '../../../contexts/FinancialDataContext';
+import { useCostingServices } from '../../../contexts/CostingServicesContext';
 import {
   ConsumablePricingInput,
   StaffCapacityInput,
   BaselineCreatePayload,
   BaselineStatus,
   FixedCostItemState,
-} from '../../services/costing/types';
-import { formatCurrency } from '../../utils/formatters';
+} from '../../../services/costing/types';
+import { formatCurrency } from '../../../utils/formatters';
 
 interface EditableStaff extends StaffCapacityInput {
   clientId: string;

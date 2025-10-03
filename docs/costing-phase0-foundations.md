@@ -1,15 +1,16 @@
 ﻿# Procedure Costing Phase 0 Foundations
 
 ## 1. 라우팅 & 접근 제어 합의안
-- 신규 경로 `/costing/base`, `/costing/procedures`, `/costing/results` 는 `StaffLayout` 하위 `Routes` 에 추가한다.
-  - `App.tsx` 에 `<Route path="costing/*" element={<CostingRouter />} />` 를 추가하고, `CostingRouter` 내부에서 `base` 기본 리다이렉트를 포함한 세부 경로를 구성한다.
-  - `ProtectedRoute role="generalAdmin"` 정책을 재사용한다. 현재 정책에서 generalAdmin=admin 이므로 별도 권한 분기 없이 전체 기능을 허용한다.
+- `/costing` 경로는 `StandaloneCostingPage` 로 연결하여 전역 기준월/손익 데이터와 분리된 상태로 실행한다.
+  - `App.tsx` 에 `<Route path="costing" element={<StandaloneCostingPage />} />` 를 배치하고, 내부 탭 전환은 컴포넌트 로컬 상태로 처리한다.
+  - `ProtectedRoute role="generalAdmin"` 정책은 그대로 재사용한다.
 - 사이드바(`src/components/Sidebar.tsx`) 업데이트
   - `staffNavItems` 배열에 `{ icon: <DocumentIcon />, label: '원가 인사이트', path: '/costing/base' }` 를 삽입한다.
   - `isInHospitalManagementMode` 로 분기되는 관리자 모드에서도 동일 항목이 노출되도록 조건을 검토한다.
 - 초기 노출 제어
   - 간단한 `FeatureFlags` 상수 또는 서비스로 `costingModule` 플래그를 정의한다.
   - 플래그가 꺼져 있을 때는 사이드바에서 항목을 숨기고, `/costing/*` 접근 시 `/dashboard` 로 리다이렉트하여 베타 운영을 지원한다.
+- 기존 기준월 연동 기반 구현은 `src/legacy/costing` 에 보관하며 참고용으로만 유지한다.
 
 ## 2. UI 컴포넌트 재사용 매트릭스
 | 요구 화면 | 재사용 컴포넌트 | 소스 경로 | 커스터마이징 메모 |
@@ -17,7 +18,7 @@
 | 기준월 선택 바 | `Header`, `MonthManagementModal` | `src/components/Header.tsx`, `src/components/modals/MonthManagementModal.tsx` | 상단에 기준월 셀렉터를 고정하고 버튼 문구만 변경 |
 | 목록/편집 테이블 | `Table`, `TableHead`, `TableRow`, `TableCell` | `src/components/ui/Table.tsx` | 열 정의만 새로 작성하고 셀 에디터는 인라인 입력으로 재사용 |
 | 저장/알림 | `useSaveNotification`, `NotificationModal`, `ConfirmationModal` | `src/hooks/useSaveNotification.ts`, `src/components/common/*` | 저장 성공/실패 토스트, 삭제 확인 등을 동일 패턴으로 연결 |
-| 레이아웃 | `StaffLayout` | `src/layouts/StaffLayout.tsx` | 상단에 `CostingLayout` 래퍼를 추가하여 탭·필터 영역을 정비 |
+| 레이아웃 | `StandaloneCostingPage` | `src/pages/costing-standalone/StandaloneCostingPage.tsx` | 자체 Provider/탭 관리 사용, 전역 기준월과 격리 |
 | 마스터-디테일 패널 | `/account-management` 페이지 구조 | `src/pages/AccountManagementPage.tsx` | 왼쪽 목록 + 오른쪽 탭 구성 복제, 필드만 원가 데이터에 맞춰 교체 |
 
 ## 3. 기준월 상태 & 락 정책
@@ -159,4 +160,3 @@ interface FixedCostLinkService {
   1. FK/인덱스/유니크 제약이 요구사항을 모두 충족하는지 검토한다.
   2. 락 상태 변환 시나리오를 SQL 레벨에서 재현해본 후, 잘못된 상태 전이가 발생하면 트랜잭션으로 롤백되는지 확인한다.
   3. `month` 컬럼은 `YYYY-MM` 형식의 `TEXT` + 체크 제약(정규식)으로 관리하고, Supabase 연동 시 `DATE` 변환 계획을 별도 기록한다.
-

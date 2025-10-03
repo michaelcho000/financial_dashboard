@@ -1,14 +1,15 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table';
-import { useCostingBaselines } from '../../contexts/CostingBaselineContext';
-import { useCostingServices } from '../../contexts/CostingServicesContext';
+﻿// Deprecated: legacy costing procedures editor retained for reference only.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/Table';
+import { useCostingBaselines } from '../../../contexts/CostingBaselineContext';
+import { useCostingServices } from '../../../contexts/CostingServicesContext';
 import {
   ProcedureSummary,
   ProcedureVariantInput,
   ProcedureStaffMixInput,
   ProcedureConsumableUsageInput,
   ProcedureEquipmentLinkInput,
-} from '../../services/costing/types';
+} from '../../../services/costing/types';
 
 const createClientId = () => 'tmp-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now();
 
@@ -800,4 +801,3 @@ const CostingProceduresPage: React.FC = () => {
 };
 
 export default CostingProceduresPage;
-

@@ -1,9 +1,10 @@
+// Deprecated: legacy costing layout retained for reference only.
 import React, { useEffect } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import Header from '../components/Header';
-import { useFinancials } from '../contexts/FinancialDataContext';
-import { CostingBaselineProvider, useCostingBaselines } from '../contexts/CostingBaselineContext';
-import { BaselineStatus } from '../services/costing/types';
+import Header from '../../components/Header';
+import { useFinancials } from '../../contexts/FinancialDataContext';
+import { CostingBaselineProvider, useCostingBaselines } from '../../contexts/CostingBaselineContext';
+import { BaselineStatus } from '../../services/costing/types';
 
 const navItems = [
   { path: '/costing/base', label: '기본 설정' },

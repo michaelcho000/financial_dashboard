@@ -6,7 +6,7 @@
 - 시술 등록과 결과 대시보드는 한 화면에서 리스트·미리보기·테이블을 모두 확인할 수 있도록 구성합니다.
 
 ## 상태 및 저장 전략
-- `StandaloneCostingProvider` 가 모든 상태를 관리하고, `localStorage` 키 `standaloneCosting.v1` 에 버전 2 스키마로 저장합니다.
+- `StandaloneCostingProvider` 는 Prisma + SQLite 기반 API(`/api/standalone-costing`)로 상태를 저장하며, JSON 스냅샷을 저장해 향후 Supabase(Postgres) 의 JSONB 스키마와 호환됩니다.
 - 로딩 시 구버전 드래프트는 시설·운영비로 기본 분류되도록 마이그레이션하며, 브라우저 알림으로 안내합니다.
 - `normalizeFixedCosts` 를 통해 모든 고정비 항목에 `costGroup`(facility/common)을 보장하고 이후 Supabase 연동 시 동일 스키마를 사용합니다.
 

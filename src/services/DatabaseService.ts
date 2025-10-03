@@ -1,8 +1,9 @@
+import axios from 'axios';
 import { Account, AccountCategory, CostBehavior, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
 
-const DB_KEY = 'financial_app_db';
-const DB_SCHEMA_VERSION = '1.0.0'; // DB 스키마 버전 (필드 구조 변경시에만 증가)
 const TEMPLATE_VERSION = '2.0.0'; // 템플릿 버전 (대표 계정 변경시 증가)
+const APP_STATE_ENDPOINT = '/api/app-state';
+const APP_STATE_VERSION = 1;
 
 const COST_TYPE_GROUP_LABEL: Record<FixedCostType, string> = {
     ASSET_FINANCE: '리스/금융 자산',
@@ -240,58 +241,52 @@ function createFinancialsFromTemplate(template: SystemSettings['tenantTemplate']
 
 class DatabaseService {
     private db: DB;
+    private initialized = false;
 
     constructor() {
-        this.db = this.loadDB();
-        this.initializeSettings();
+        this.db = initialDb;
     }
 
-    private loadDB(): DB {
-        if (typeof window === 'undefined') {
-            return initialDb;
+    public async init(): Promise<void> {
+        if (this.initialized) {
+            return;
         }
+
+        const loadedDb = await this.loadDB();
+        this.db = loadedDb;
+        this.initializeSettings();
+        this.initialized = true;
+    }
+
+    private async loadDB(): Promise<DB> {
         try {
-            const serializedState = localStorage.getItem(DB_KEY);
-            const schemaVersionKey = `${DB_KEY}_schema_version`;
-            const storedSchemaVersion = localStorage.getItem(schemaVersionKey);
+            const response = await axios.get(APP_STATE_ENDPOINT);
+            const { data, version } = response.data ?? {};
 
-            // DB가 없으면 초기화
-            if (serializedState === null) {
-                console.log('Database not found. Initializing...');
-                localStorage.setItem(schemaVersionKey, DB_SCHEMA_VERSION);
-                this.saveDB(initialDb);
-                return initialDb;
+            if (data && typeof data === 'object') {
+                if (version === APP_STATE_VERSION) {
+                    return data as DB;
+                }
+                console.warn(`App state version mismatch (${version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
             }
-
-            const db = JSON.parse(serializedState);
-
-            // 스키마 버전이 다르면 전체 초기화 (구조 변경)
-            if (storedSchemaVersion !== DB_SCHEMA_VERSION) {
-                console.warn(`Schema version mismatch (${storedSchemaVersion} vs ${DB_SCHEMA_VERSION}). Full reset required.`);
-                localStorage.setItem(schemaVersionKey, DB_SCHEMA_VERSION);
-                this.saveDB(initialDb);
-                return initialDb;
-            }
-
-            // 기존 사용자/병원 데이터 보존하고 settings만 체크
-            return db;
-
         } catch (error) {
-            console.error('Critical error parsing database. Full reset required.', error);
-            localStorage.setItem(`${DB_KEY}_schema_version`, DB_SCHEMA_VERSION);
-            return initialDb;
+            console.error('[DatabaseService] Failed to load app state from server', error);
         }
+
+        const clone = JSON.parse(JSON.stringify(initialDb)) as DB;
+        this.saveDB(clone);
+        return clone;
     }
 
     private saveDB(db: DB) {
-        if (typeof window !== 'undefined') {
-            try {
-                const serializedState = JSON.stringify(db);
-                localStorage.setItem(DB_KEY, serializedState);
-            } catch (error) {
-                console.error('Error saving state to localStorage:', error);
-            }
-        }
+        axios
+            .post(APP_STATE_ENDPOINT, {
+                data: db,
+                version: APP_STATE_VERSION,
+            })
+            .catch(error => {
+                console.error('[DatabaseService] Failed to persist app state', error);
+            });
     }
 
     // 안전한 템플릿 마이그레이션: 기존 병원 데이터는 보존, 템플릿만 업데이트
@@ -527,73 +522,19 @@ class DatabaseService {
     }
 
     // 병원 데이터 백업 생성
-    private createTenantBackup(tenantId: string, financials: Financials) {
-        try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const backupKey = `${DB_KEY}_backup_${tenantId}_${timestamp}`;
-            const backupData = {
-                tenantId,
-                timestamp,
-                templateVersion: financials.templateVersion || 'unknown',
-                data: JSON.parse(JSON.stringify(financials))
-            };
-
-            if (typeof window !== 'undefined') {
-                localStorage.setItem(backupKey, JSON.stringify(backupData));
-                console.log(`💾 Backup created for tenant ${tenantId}: ${backupKey}`);
-            }
-        } catch (error) {
-            console.error(`Failed to create backup for tenant ${tenantId}:`, error);
-        }
+    private createTenantBackup(_tenantId: string, _financials: Financials) {
+        console.info('Backup creation is not supported in server persistence mode.');
     }
 
     // 백업 목록 조회
     public getBackups(): Array<{key: string, tenantId: string, timestamp: string, templateVersion: string}> {
-        if (typeof window === 'undefined') return [];
-
-        const backups: Array<{key: string, tenantId: string, timestamp: string, templateVersion: string}> = [];
-
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(`${DB_KEY}_backup_`)) {
-                try {
-                    const backupData = JSON.parse(localStorage.getItem(key) || '{}');
-                    backups.push({
-                        key,
-                        tenantId: backupData.tenantId,
-                        timestamp: backupData.timestamp,
-                        templateVersion: backupData.templateVersion
-                    });
-                } catch (error) {
-                    console.warn(`Invalid backup data in ${key}:`, error);
-                }
-            }
-        }
-
-        return backups.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        return [];
     }
 
     // 백업에서 병원 데이터 복구
     public restoreFromBackup(backupKey: string): boolean {
-        try {
-            if (typeof window === 'undefined') return false;
-
-            const backupData = localStorage.getItem(backupKey);
-            if (!backupData) {
-                console.error(`Backup not found: ${backupKey}`);
-                return false;
-            }
-
-            const backup = JSON.parse(backupData);
-            this.db.financialData[backup.tenantId] = backup.data;
-            this.saveDB(this.db);
-
-            console.log(`✅ Restored tenant ${backup.tenantId} from backup ${backupKey}`);
-            return true;
-        } catch (error) {
-            console.error(`Failed to restore from backup ${backupKey}:`, error);
-            return false;
-        }
+        console.warn(`Backup restore is not supported in server persistence mode (${backupKey}).`);
+        return false;
     }
 
     // 수동 마이그레이션 실행 (슈퍼관리자용)
@@ -623,10 +564,6 @@ class DatabaseService {
 
         this.saveDB(this.db);
         return {success, failed, results};
-    }
-
-    public init() {
-      // The constructor already handles initialization.
     }
 
     public login(id: string, password?: string): User | null {

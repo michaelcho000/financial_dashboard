@@ -1,0 +1,31 @@
+{
+  "root": true,
+  "ignorePatterns": ["dist/", "node_modules/"],
+  "overrides": [
+    {
+      "files": ["src/**/*.{ts,tsx,js,jsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/contexts/CostingBaselineContext",
+                  "**/contexts/CostingServicesContext"
+                ],
+                "message": "Legacy costing contexts are deprecated. Use StandaloneCostingProvider or dedicated modules instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/legacy/**/*.{ts,tsx,js,jsx}"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

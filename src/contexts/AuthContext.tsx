@@ -15,7 +15,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        DatabaseService.init();
         try {
             const storedUser = localStorage.getItem(CURRENT_USER_KEY);
             if (storedUser) {

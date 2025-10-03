@@ -1,6 +1,7 @@
-﻿import React from 'react';
+﻿// Deprecated: legacy costing router retained for reference only.
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import CostingLayout from '../../layouts/CostingLayout';
+import CostingLayout from '../CostingLayout';
 import CostingBasePage from './CostingBasePage';
 import CostingProceduresPage from './CostingProceduresPage';
 import CostingResultsPage from './CostingResultsPage';

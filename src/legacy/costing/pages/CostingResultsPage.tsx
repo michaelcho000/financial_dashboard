@@ -1,9 +1,10 @@
+// Deprecated: legacy costing results view retained for reference only.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table';
-import { useCostingBaselines } from '../../contexts/CostingBaselineContext';
-import { useCostingServices } from '../../contexts/CostingServicesContext';
-import { CostingResultRow, InsightPayload } from '../../services/costing/types';
-import { formatCurrency, formatPercentage, formatMonth } from '../../utils/formatters';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/Table';
+import { useCostingBaselines } from '../../../contexts/CostingBaselineContext';
+import { useCostingServices } from '../../../contexts/CostingServicesContext';
+import { CostingResultRow, InsightPayload } from '../../../services/costing/types';
+import { formatCurrency, formatPercentage, formatMonth } from '../../../utils/formatters';
 
 const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
@@ -632,4 +633,3 @@ const CostingResultsPage: React.FC = () => {
 };
 
 export default CostingResultsPage;
-

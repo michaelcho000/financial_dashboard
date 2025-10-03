@@ -265,9 +265,10 @@ The application supports Korean healthcare terminology and business practices:
 **Implementation Example**:
 ```tsx
 import { featureFlags } from './config/featureFlags';
+import StandaloneCostingPage from './pages/costing-standalone/StandaloneCostingPage';
 
 {featureFlags.costingModule && (
-    <Route path="costing/*" element={<CostingRouter />} />
+    <Route path="costing" element={<StandaloneCostingPage />} />
 )}
 ```
 
@@ -275,10 +276,10 @@ import { featureFlags } from './config/featureFlags';
 **Purpose**: Procedure-based cost analysis and pricing calculations for healthcare services.
 
 **Key Components**:
-- `CostingRouter` - Nested routing for costing workflows
-- `CostingLayout` - Specialized layout with header integration
-- `CostingServicesContext` - Service layer abstraction
-- `CostingBaselineContext` - Baseline data management
+- `StandaloneCostingPage` - All-in-one costing workflow with local provider state
+- `StandaloneCostingProvider` - Encapsulates operational/staff/material/fixed cost data
+- `services/standaloneCosting/*` - Calculation helpers and local persistence utilities
+- `_legacy/costing` - Archived baseline-based implementation kept read-only
 
 **Service Layers**:
 - **Factory Pattern**: `services/costing/factory.ts` - Service instantiation
@@ -287,6 +288,6 @@ import { featureFlags } from './config/featureFlags';
 - **HTTP Client**: `services/costing/client/httpClient.ts` - API communication
 
 **Integration Points**:
-- Header component includes costing navigation when enabled
-- Month synchronization with main financial dashboard
-- Isolated data contexts for costing-specific state management
+- Header/Sidebar link is feature-flagged; standalone screen handles its own tabs
+- No month synchronization with financial dashboard (intentionally isolated)
+- Archived baseline contexts remain in `src/legacy/costing` for historical reference only

@@ -4,23 +4,35 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx vite",
+    "dev": "node server/start-dev.js",
+    "dev:only": "npx vite",
+    "server:only": "node server/index.js",
+    "server": "node server/index.js",
     "build": "npx tsc && npx vite build",
-    "preview": "npx vite preview"
+    "preview": "npx vite preview",
+    "db:push": "npx prisma db push",
+    "prisma:generate": "npx prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "lucide-react": "^0.544.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-pdf": "^9.1.0",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.15.4",
+    "winston": "^3.13.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.9",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
+    "prisma": "^5.19.1",
     "esbuild": "^0.25.10",
     "typescript": "^5.6.3",
     "vite": "^5.4.20"
