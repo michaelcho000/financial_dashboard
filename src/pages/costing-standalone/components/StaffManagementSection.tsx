@@ -2,8 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { calculateStaffMinuteRate } from '../../../services/standaloneCosting/calculations';
 import { StaffProfile } from '../../../services/standaloneCosting/types';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
-import { formatKrw } from '../../../utils/formatters';
+import { formatKrw, formatNumberInput, parseNumberInput } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
+import Modal from '../../../components/common/Modal';
 
 interface StaffFormState {
   id: string | null;
@@ -36,10 +37,16 @@ const toNumber = (value: string): number | null => {
 const StaffManagementSection: React.FC = () => {
   const { state, upsertStaff, removeStaff } = useStandaloneCosting();
   const [form, setForm] = useState<StaffFormState>(emptyForm);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    // 금액 필드는 콤마를 제거한 순수 숫자만 저장
+    if (name === 'monthlySalary') {
+      setForm(prev => ({ ...prev, [name]: parseNumberInput(value) }));
+    } else {
+      setForm(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const resetForm = () => {
@@ -60,6 +67,16 @@ const StaffManagementSection: React.FC = () => {
 
     upsertStaff(payload);
     resetForm();
+    setIsModalOpen(false);
+  };
+
+  const openModal = () => {
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    resetForm();
   };
 
   const handleEdit = (staff: StaffProfile) => {
@@ -72,6 +89,7 @@ const StaffManagementSection: React.FC = () => {
       workHoursPerDay: String(staff.workHoursPerDay ?? ''),
       notes: staff.notes ?? '',
     });
+    setIsModalOpen(true);
   };
 
   const handleDelete = (staff: StaffProfile) => {
@@ -97,156 +115,176 @@ const StaffManagementSection: React.FC = () => {
   );
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <header className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">인력 관리</h2>
-        <p className="mt-1 text-sm text-gray-600">의사, 간호사 등 역할별 급여와 근무 시간을 등록합니다.</p>
-      </header>
+    <>
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <header className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">인력 관리</h2>
+            <p className="mt-1 text-sm text-gray-600">의사, 간호사 등 역할별 급여와 근무 시간을 등록합니다.</p>
+          </div>
+          <button
+            onClick={openModal}
+            className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          >
+            + 인력 추가
+          </button>
+        </header>
 
-      <form className="grid gap-4 md:grid-cols-3" onSubmit={handleSubmit}>
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          이름
-          <input
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-500">역할</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-500">월 급여 (원)</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-500">월 근무 시간 (분)</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-500">분당 인건비 (원/분)</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {staffWithDerived.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-400" colSpan={7}>
+                    등록된 인력이 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                staffWithDerived.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-4 py-2 text-gray-600">{item.role}</td>
+                    <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.monthlySalary)}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{item.monthlyMinutes.toLocaleString('ko-KR')}분</td>
+                    <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.minuteRate)}</td>
+                    <td className="px-4 py-2 text-gray-600">{item.notes || '-'}</td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(item)}
+                          className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100"
+                        >
+                          편집
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item)}
+                          className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          역할
-          <input
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-            placeholder="예: 의사, 간호사"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          월 급여 (원)
-          <input
-            name="monthlySalary"
-            type="number"
-            min={0}
-            value={form.monthlySalary}
-            onChange={handleChange}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          월 근무일
-          <input
-            name="workDaysPerMonth"
-            type="number"
-            min={0}
-            value={form.workDaysPerMonth}
-            onChange={handleChange}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
-          1일 근무시간 (시간)
-          <input
-            name="workHoursPerDay"
-            type="number"
-            min={0}
-            step={0.5}
-            value={form.workHoursPerDay}
-            onChange={handleChange}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
-        <label className="md:col-span-3 flex flex-col gap-1 text-sm text-gray-700">
-          메모
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={handleChange}
-            rows={2}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-
-        <div className="md:col-span-3 flex justify-end gap-2">
-          {form.id && (
+      {/* 인력 추가/편집 모달 */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={form.id ? '인력 정보 수정' : '인력 추가'}
+        size="md"
+        footer={
+          <>
             <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+              onClick={closeModal}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             >
               취소
             </button>
-          )}
-          <button
-            type="submit"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            {form.id ? '변경 저장' : '인력 추가'}
-          </button>
-        </div>
-      </form>
+            <button
+              onClick={handleSubmit}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              저장
+            </button>
+          </>
+        }
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-gray-700">
+              이름
+              <input
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
 
-      <div className="mt-6 overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">이름</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">역할</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">월 급여 (원)</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">월 근무 시간 (분)</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">분당 인건비 (원/분)</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">메모</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {staffWithDerived.length === 0 ? (
-              <tr>
-                <td className="px-4 py-6 text-center text-gray-400" colSpan={7}>
-                  등록된 인력이 없습니다.
-                </td>
-              </tr>
-            ) : (
-              staffWithDerived.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium text-gray-900">{item.name}</td>
-                  <td className="px-4 py-2 text-gray-600">{item.role}</td>
-                  <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.monthlySalary)}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">{item.monthlyMinutes.toLocaleString('ko-KR')}분</td>
-                  <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.minuteRate)}</td>
-                  <td className="px-4 py-2 text-gray-600">{item.notes || '-'}</td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(item)}
-                        className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100"
-                      >
-                        편집
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
+            <label className="flex flex-col gap-1 text-sm text-gray-700">
+              역할
+              <input
+                name="role"
+                value={form.role}
+                onChange={handleChange}
+                placeholder="예: 의사, 간호사"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-sm text-gray-700">
+            월 급여 (원)
+            <input
+              name="monthlySalary"
+              type="text"
+              value={formatNumberInput(form.monthlySalary)}
+              onChange={handleChange}
+              placeholder="예: 8,000,000"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-gray-700">
+              월 근무일
+              <input
+                name="workDaysPerMonth"
+                type="number"
+                min={0}
+                value={form.workDaysPerMonth}
+                onChange={handleChange}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-gray-700">
+              1일 근무시간 (시간)
+              <input
+                name="workHoursPerDay"
+                type="number"
+                min={0}
+                step={0.5}
+                value={form.workHoursPerDay}
+                onChange={handleChange}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1 text-sm text-gray-700">
+            메모
+            <textarea
+              name="notes"
+              value={form.notes}
+              onChange={handleChange}
+              rows={3}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+        </form>
+      </Modal>
+    </>
   );
 };
 
