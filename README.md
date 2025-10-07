@@ -17,9 +17,14 @@ View your app in AI Studio: https://ai.studio/apps/drive/1WySWOPavI81PyhU_Bx3bwt
    `npm install`
 2. Configure environment variables:
    - Copy `.env.example` to `.env`
+   - Provide Supabase credentials so application state persists across sessions:
+     - `VITE_SUPABASE_URL=https://kqcikrxpamvyrbichwfx.supabase.co`
+     - `VITE_SUPABASE_ANON_KEY=<your anon key>`
    - Optionally set the `GEMINI_API_KEY` in [.env.local](.env.local)
 3. Generate Prisma client & create the local SQLite database:
    - `npm run prisma:generate`
    - `npm run db:push`
 4. Run the app (API 서버와 프런트 동시에 실행):
    `npm run dev`
+
+> Supabase 환경 변수를 제공하지 않으면 애플리케이션 상태는 기본 샘플 데이터로만 유지되고 새로고침 시 초기화됩니다.
