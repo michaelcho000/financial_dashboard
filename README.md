@@ -17,7 +17,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1WySWOPavI81PyhU_Bx3bwt
    `npm install`
 2. Configure environment variables:
    - Copy `.env.example` to `.env`
-   - Provide Supabase credentials so both financial data와 코스팅 모듈 상태가 공유됩니다:
+   - Provide Supabase credentials so both financial data와 코스팅 모듈 상태가 공유됩니다 (모든 환경에서 필수):
      - `VITE_SUPABASE_URL=https://kqcikrxpamvyrbichwfx.supabase.co`
      - `VITE_SUPABASE_ANON_KEY=<your anon key>`
      - `VITE_COSTING_BACKEND=supabase`
@@ -29,3 +29,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1WySWOPavI81PyhU_Bx3bwt
    `npm run dev`
 
 > Supabase 환경 변수를 제공하지 않으면 애플리케이션과 코스팅 모듈 상태는 기본 샘플 데이터로만 유지되고 새로고침 시 초기화됩니다.
+
+### Supabase 연결 검증
+
+- 환경 변수가 설정된 뒤 `npm run supabase:check` 명령으로 Supabase 쓰기/읽기 연결을 미리 확인할 수 있습니다. 이 스크립트는 `.env` 를 자동으로 로드하며, `app_state` 테이블에 기본 행이 없으면 초기화합니다.

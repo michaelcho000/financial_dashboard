@@ -1,10 +1,8 @@
-import axios from 'axios';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Account, AccountCategory, CostBehavior, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
 import { getSupabaseClient, hasSupabaseConfig } from './supabaseClient';
 
 const TEMPLATE_VERSION = '2.0.0'; // 템플릿 버전 (대표 계정 변경시 증가)
-const APP_STATE_ENDPOINT = '/api/app-state';
 const APP_STATE_VERSION = 1;
 const APP_STATE_ID = 'app-state-primary';
 const SUPABASE_APP_STATE_TABLE = 'app_state';
@@ -312,70 +310,49 @@ class DatabaseService {
 
     private async loadDB(): Promise<DB> {
         const supabaseClient = getSupabaseClient();
-
-        if (supabaseClient) {
-            try {
-                const { data: row, error } = await supabaseClient
-                    .from(SUPABASE_APP_STATE_TABLE)
-                    .select('data, version')
-                    .eq('id', APP_STATE_ID)
-                    .maybeSingle();
-
-                if (error) {
-                    console.error('[DatabaseService] Failed to load app state from Supabase', error);
-                } else if (row?.data && typeof row.data === 'object') {
-                    if (row.version === APP_STATE_VERSION) {
-                        return mergeDbWithDefaults(row.data as Partial<DB>);
-                    }
-                    console.warn(`App state version mismatch (${row.version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
-                }
-            } catch (error) {
-                console.error('[DatabaseService] Unexpected Supabase error', error);
-            }
-
-            const defaultDb = cloneInitialDb();
-            await this.persistAppStateToSupabase(defaultDb, supabaseClient);
-            return defaultDb;
-        }
-
-        if (hasSupabaseConfig()) {
-            console.warn('[DatabaseService] Supabase configuration detected but client could not be created. Falling back to local defaults.');
+        if (!supabaseClient) {
+            const message = hasSupabaseConfig()
+                ? '[DatabaseService] Supabase client could not be created even though configuration is present.'
+                : '[DatabaseService] Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+            throw new Error(message);
         }
 
         try {
-            const response = await axios.get(APP_STATE_ENDPOINT);
-            const { data, version } = response.data ?? {};
+            const { data: row, error } = await supabaseClient
+                .from(SUPABASE_APP_STATE_TABLE)
+                .select('data, version')
+                .eq('id', APP_STATE_ID)
+                .maybeSingle();
 
-            if (data && typeof data === 'object') {
-                if (version === APP_STATE_VERSION) {
-                    return mergeDbWithDefaults(data as Partial<DB>);
+            if (error) {
+                throw error;
+            }
+
+            if (row?.data && typeof row.data === 'object') {
+                if (row.version === APP_STATE_VERSION) {
+                    return mergeDbWithDefaults(row.data as Partial<DB>);
                 }
-                console.warn(`App state version mismatch (${version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
+                console.warn(`App state version mismatch (${row.version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
             }
         } catch (error) {
-            console.error('[DatabaseService] Failed to load app state from server', error);
+            console.error('[DatabaseService] Failed to load app state from Supabase', error);
         }
 
-        const clone = cloneInitialDb();
-        this.saveDB(clone);
-        return clone;
+        const defaultDb = cloneInitialDb();
+        await this.persistAppStateToSupabase(defaultDb, supabaseClient);
+        return defaultDb;
     }
 
     private saveDB(db: DB) {
         const supabaseClient = getSupabaseClient();
-        if (supabaseClient) {
-            void this.persistAppStateToSupabase(db, supabaseClient);
-            return;
+        if (!supabaseClient) {
+            const message = hasSupabaseConfig()
+                ? '[DatabaseService] Supabase client could not be created even though configuration is present.'
+                : '[DatabaseService] Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+            throw new Error(message);
         }
 
-        axios
-            .post(APP_STATE_ENDPOINT, {
-                data: db,
-                version: APP_STATE_VERSION,
-            })
-            .catch(error => {
-                console.error('[DatabaseService] Failed to persist app state', error);
-            });
+        void this.persistAppStateToSupabase(db, supabaseClient);
     }
 
     // 안전한 템플릿 마이그레이션: 기존 병원 데이터는 보존, 템플릿만 업데이트

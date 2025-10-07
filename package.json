@@ -11,7 +11,8 @@
     "build": "npx tsc && npx vite build",
     "preview": "npx vite preview",
     "db:push": "npx prisma db push",
-    "prisma:generate": "npx prisma generate"
+    "prisma:generate": "npx prisma generate",
+    "supabase:check": "node scripts/check-supabase.js"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
