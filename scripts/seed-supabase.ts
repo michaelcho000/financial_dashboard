@@ -28,9 +28,15 @@ loadEnv();
 
 const url = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
 const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+const allowSeed = process.env.ALLOW_SUPABASE_SEED === 'true' || process.env.ALLOW_SUPABASE_SEED === '1';
 
 if (!url || !anonKey) {
   console.error('Supabase 환경 변수가 없습니다. VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 를 설정하세요.');
+  process.exit(1);
+}
+
+if (!allowSeed) {
+  console.error('시드 스크립트가 차단되었습니다. 환경 변수 ALLOW_SUPABASE_SEED=true 를 설정한 상태에서만 실행할 수 있습니다.');
   process.exit(1);
 }
 
