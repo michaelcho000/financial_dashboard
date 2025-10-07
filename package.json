@@ -12,7 +12,8 @@
     "preview": "npx vite preview",
     "db:push": "npx prisma db push",
     "prisma:generate": "npx prisma generate",
-    "supabase:check": "node scripts/check-supabase.js"
+    "supabase:check": "node scripts/check-supabase.js",
+    "supabase:seed": "npx tsx scripts/seed-supabase.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

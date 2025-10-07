@@ -15,6 +15,8 @@ const cloneInitialDb = (): DB => {
     };
 };
 
+export const createInitialDatabaseSnapshot = (): DB => cloneInitialDb();
+
 const mergeDbWithDefaults = (incoming?: Partial<DB>): DB => {
     const base = cloneInitialDb();
     if (!incoming) {
