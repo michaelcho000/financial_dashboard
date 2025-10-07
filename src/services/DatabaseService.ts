@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { Account, AccountCategory, CostBehavior, DB, Financials, FixedCostActual, FixedCostTemplate, FixedCostType, SystemSettings, Tenant, User } from '../types';
 import { getSupabaseClient, hasSupabaseConfig } from './supabaseClient';
 
@@ -7,6 +8,40 @@ const APP_STATE_ENDPOINT = '/api/app-state';
 const APP_STATE_VERSION = 1;
 const APP_STATE_ID = 'app-state-primary';
 const SUPABASE_APP_STATE_TABLE = 'app_state';
+
+const cloneInitialDb = (): DB => {
+    const base = JSON.parse(JSON.stringify(initialDb)) as DB;
+    return {
+        ...base,
+        settings: base.settings ?? createDefaultSystemSettings(),
+    };
+};
+
+const mergeDbWithDefaults = (incoming?: Partial<DB>): DB => {
+    const base = cloneInitialDb();
+    if (!incoming) {
+        return base;
+    }
+
+    const mergedSettings = incoming.settings
+        ? {
+              ...base.settings,
+              ...incoming.settings,
+          }
+        : base.settings;
+
+    return {
+        ...base,
+        ...incoming,
+        users: incoming.users ?? base.users,
+        tenants: incoming.tenants ?? base.tenants,
+        financialData: {
+            ...base.financialData,
+            ...(incoming.financialData ?? {}),
+        },
+        settings: mergedSettings,
+    };
+};
 
 const COST_TYPE_GROUP_LABEL: Record<FixedCostType, string> = {
     ASSET_FINANCE: '리스/금융 자산',
@@ -247,7 +282,21 @@ class DatabaseService {
     private initialized = false;
 
     constructor() {
-        this.db = initialDb;
+        this.db = cloneInitialDb();
+    }
+
+    private async persistAppStateToSupabase(db: DB, client: SupabaseClient): Promise<void> {
+        try {
+            const { error } = await client
+                .from(SUPABASE_APP_STATE_TABLE)
+                .upsert({ id: APP_STATE_ID, data: db, version: APP_STATE_VERSION });
+
+            if (error) {
+                console.error('[DatabaseService] Failed to persist app state to Supabase', error);
+            }
+        } catch (error) {
+            console.error('[DatabaseService] Unexpected Supabase error while persisting app state', error);
+        }
     }
 
     public async init(): Promise<void> {
@@ -276,32 +325,38 @@ class DatabaseService {
                     console.error('[DatabaseService] Failed to load app state from Supabase', error);
                 } else if (row?.data && typeof row.data === 'object') {
                     if (row.version === APP_STATE_VERSION) {
-                        return row.data as DB;
+                        return mergeDbWithDefaults(row.data as Partial<DB>);
                     }
                     console.warn(`App state version mismatch (${row.version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
                 }
             } catch (error) {
                 console.error('[DatabaseService] Unexpected Supabase error', error);
             }
-        } else if (hasSupabaseConfig()) {
-            console.warn('[DatabaseService] Supabase configuration detected but client could not be created. Falling back to local defaults.');
-        } else {
-            try {
-                const response = await axios.get(APP_STATE_ENDPOINT);
-                const { data, version } = response.data ?? {};
 
-                if (data && typeof data === 'object') {
-                    if (version === APP_STATE_VERSION) {
-                        return data as DB;
-                    }
-                    console.warn(`App state version mismatch (${version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
-                }
-            } catch (error) {
-                console.error('[DatabaseService] Failed to load app state from server', error);
-            }
+            const defaultDb = cloneInitialDb();
+            await this.persistAppStateToSupabase(defaultDb, supabaseClient);
+            return defaultDb;
         }
 
-        const clone = JSON.parse(JSON.stringify(initialDb)) as DB;
+        if (hasSupabaseConfig()) {
+            console.warn('[DatabaseService] Supabase configuration detected but client could not be created. Falling back to local defaults.');
+        }
+
+        try {
+            const response = await axios.get(APP_STATE_ENDPOINT);
+            const { data, version } = response.data ?? {};
+
+            if (data && typeof data === 'object') {
+                if (version === APP_STATE_VERSION) {
+                    return mergeDbWithDefaults(data as Partial<DB>);
+                }
+                console.warn(`App state version mismatch (${version} vs ${APP_STATE_VERSION}). Resetting to defaults.`);
+            }
+        } catch (error) {
+            console.error('[DatabaseService] Failed to load app state from server', error);
+        }
+
+        const clone = cloneInitialDb();
         this.saveDB(clone);
         return clone;
     }
@@ -309,19 +364,7 @@ class DatabaseService {
     private saveDB(db: DB) {
         const supabaseClient = getSupabaseClient();
         if (supabaseClient) {
-            void (async () => {
-                try {
-                    const { error } = await supabaseClient
-                        .from(SUPABASE_APP_STATE_TABLE)
-                        .upsert({ id: APP_STATE_ID, data: db, version: APP_STATE_VERSION });
-
-                    if (error) {
-                        console.error('[DatabaseService] Failed to persist app state to Supabase', error);
-                    }
-                } catch (error) {
-                    console.error('[DatabaseService] Unexpected Supabase error while persisting app state', error);
-                }
-            })();
+            void this.persistAppStateToSupabase(db, supabaseClient);
             return;
         }
 
