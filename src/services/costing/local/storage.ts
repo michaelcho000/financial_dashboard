@@ -148,3 +148,4 @@ export const localDB = {
 };
 
 export type { StoredProcedureDefinition, StoredProcedureVariant, StoredBaseline, StoredResults, StoredJob, LocalCostingDB };
+export const defaultLocalCostingDB = defaultDB;
