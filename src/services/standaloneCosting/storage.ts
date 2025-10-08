@@ -1,4 +1,5 @@
 ﻿import axios from 'axios';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import {
   CostingPhaseId,
   CostingPhaseStatus,
@@ -12,9 +13,7 @@ import {
   WeeklyOperationalSchedule,
   WeeklyScheduleEntry,
 } from './types';
-
-const API_PATH = '/api/standalone-costing';
-const CURRENT_VERSION = 7;
+import { getSupabaseClient, hasSupabaseConfig } from '../supabaseClient';
 
 export interface LoadedDraftResult {
   state: StandaloneCostingState;
@@ -22,6 +21,115 @@ export interface LoadedDraftResult {
 }
 
 type PartialState = Partial<StandaloneCostingState>;
+
+const API_PATH = '/api/standalone-costing';
+const CURRENT_VERSION = 7;
+const SUPABASE_TABLE = 'standalone_costing_state';
+const SUPABASE_ROW_ID = 'standalone-costing-primary';
+
+const resolveSupabaseClient = (): SupabaseClient | null => {
+  if (!hasSupabaseConfig()) {
+    return null;
+  }
+  return getSupabaseClient();
+};
+
+const loadDraftViaSupabase = async (client: SupabaseClient): Promise<LoadedDraftResult | null> => {
+  const { data, error } = await client
+    .from(SUPABASE_TABLE)
+    .select('state, version')
+    .eq('id', SUPABASE_ROW_ID)
+    .maybeSingle();
+
+  if (error && (error as PostgrestError).code !== 'PGRST116') {
+    throw error;
+  }
+
+  if (!data || !data.state) {
+    return null;
+  }
+
+  const resolvedVersion = typeof data.version === 'number' ? data.version : 1;
+  if (resolvedVersion > CURRENT_VERSION) {
+    return null;
+  }
+
+  if (resolvedVersion === CURRENT_VERSION) {
+    return { state: normalizeState(data.state as PartialState), migrated: false };
+  }
+
+  const migratedState = migrateState(data.state as PartialState, resolvedVersion);
+  return { state: migratedState, migrated: true };
+};
+
+const saveDraftViaSupabase = async (client: SupabaseClient, state: StandaloneCostingState): Promise<void> => {
+  const { error } = await client
+    .from(SUPABASE_TABLE)
+    .upsert({
+      id: SUPABASE_ROW_ID,
+      state,
+      version: CURRENT_VERSION,
+    });
+
+  if (error) {
+    throw error;
+  }
+};
+
+const clearDraftViaSupabase = async (client: SupabaseClient): Promise<void> => {
+  const { error } = await client
+    .from(SUPABASE_TABLE)
+    .delete()
+    .eq('id', SUPABASE_ROW_ID);
+
+  if (error && (error as PostgrestError).code !== 'PGRST116') {
+    throw error;
+  }
+};
+
+const loadDraftViaApi = async (): Promise<LoadedDraftResult | null> => {
+  try {
+    const response = await axios.get(API_PATH);
+    const { state, version } = response.data ?? {};
+    if (!state) {
+      return null;
+    }
+
+    const resolvedVersion = typeof version === 'number' ? version : 1;
+    if (resolvedVersion > CURRENT_VERSION) {
+      return null;
+    }
+
+    if (resolvedVersion === CURRENT_VERSION) {
+      return { state: normalizeState(state), migrated: false };
+    }
+
+    const migratedState = migrateState(state, resolvedVersion);
+    return { state: migratedState, migrated: true };
+  } catch (error) {
+    console.error('[StandaloneCosting] Failed to load draft', error);
+    return null;
+  }
+};
+
+const saveDraftViaApi = async (state: StandaloneCostingState): Promise<void> => {
+  try {
+    await axios.post(API_PATH, {
+      state,
+      version: CURRENT_VERSION,
+    });
+  } catch (error) {
+    console.error('[StandaloneCosting] Failed to save draft', error);
+  }
+};
+
+const clearDraftViaApi = async (): Promise<void> => {
+  try {
+    await axios.delete(API_PATH);
+  } catch (error) {
+    console.error('[StandaloneCosting] Failed to clear draft', error);
+  }
+};
 
 const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category?: string }): FixedCostItem => {
   const normalizedGroup: FixedCostGroup =
@@ -430,45 +538,42 @@ const migrateState = (state: PartialState, version: number): StandaloneCostingSt
 };
 
 export const loadDraft = async (): Promise<LoadedDraftResult | null> => {
-  try {
-    const response = await axios.get(API_PATH);
-    const { state, version } = response.data ?? {};
-    if (!state) {
-      return null;
+  const supabase = resolveSupabaseClient();
+  if (supabase) {
+    try {
+      return await loadDraftViaSupabase(supabase);
+    } catch (error) {
+      console.error('[StandaloneCosting] Supabase load failed, falling back to API', error);
     }
-
-    const resolvedVersion = typeof version === 'number' ? version : 1;
-    if (resolvedVersion > CURRENT_VERSION) {
-      return null;
-    }
-
-    if (resolvedVersion === CURRENT_VERSION) {
-      return { state: normalizeState(state), migrated: false };
-    }
-
-    const migratedState = migrateState(state, resolvedVersion);
-    return { state: migratedState, migrated: true };
-  } catch (error) {
-    console.error('[StandaloneCosting] Failed to load draft', error);
-    return null;
   }
+
+  return loadDraftViaApi();
 };
 
 export const saveDraft = async (state: StandaloneCostingState): Promise<void> => {
-  try {
-    await axios.post(API_PATH, {
-      state,
-      version: CURRENT_VERSION,
-    });
-  } catch (error) {
-    console.error('[StandaloneCosting] Failed to save draft', error);
+  const supabase = resolveSupabaseClient();
+  if (supabase) {
+    try {
+      await saveDraftViaSupabase(supabase, state);
+      return;
+    } catch (error) {
+      console.error('[StandaloneCosting] Supabase save failed, falling back to API', error);
+    }
   }
+
+  await saveDraftViaApi(state);
 };
 
 export const clearDraft = async (): Promise<void> => {
-  try {
-    await axios.delete(API_PATH);
-  } catch (error) {
-    console.error('[StandaloneCosting] Failed to clear draft', error);
+  const supabase = resolveSupabaseClient();
+  if (supabase) {
+    try {
+      await clearDraftViaSupabase(supabase);
+      return;
+    } catch (error) {
+      console.error('[StandaloneCosting] Supabase clear failed, falling back to API', error);
+    }
   }
+
+  await clearDraftViaApi();
 };
