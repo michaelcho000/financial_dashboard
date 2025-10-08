@@ -1,4 +1,5 @@
 ﻿import {
+  DayOfWeek,
   FixedCostGroup,
   FixedCostItem,
   MaterialItem,
@@ -9,10 +10,13 @@
   StaffAssignment,
   StaffProfile,
   WeeklyOperationalSchedule,
+  WeeklyScheduleEntry,
 } from './types';
 
 const MINUTES_IN_HOUR = 60;
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
+const CALENDAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const JS_DAY_TO_DAY_OF_WEEK: DayOfWeek[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 const parseTimeToMinutes = (time: string | null): number | null => {
   if (!time) {
@@ -27,15 +31,27 @@ const parseTimeToMinutes = (time: string | null): number | null => {
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
     return null;
   }
-  return hours * MINUTES_IN_HOUR + minutes;
+  const duration = hours * MINUTES_IN_HOUR + minutes;
+  return Number.isFinite(duration) ? duration : null;
 };
 
-const calculateWeeklyMinutes = (schedule: WeeklyOperationalSchedule): number => {
-  const baseWeeks = schedule.weeksPerMonth ?? DEFAULT_WEEKS_PER_MONTH;
-  if (!Number.isFinite(baseWeeks) || baseWeeks <= 0) {
-    return 0;
+const sanitizeCalendarMonth = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
   }
-  const weeklyMinutes = schedule.schedule.reduce((sum, entry) => {
+  const trimmed = value.trim();
+  return CALENDAR_MONTH_PATTERN.test(trimmed) ? trimmed : null;
+};
+
+const getCurrentCalendarMonth = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+const calculateWeeklyPatternMinutes = (schedule: WeeklyOperationalSchedule): number => {
+  return schedule.schedule.reduce((sum, entry) => {
     if (!entry.isOpen) {
       return sum;
     }
@@ -50,10 +66,94 @@ const calculateWeeklyMinutes = (schedule: WeeklyOperationalSchedule): number => 
     }
     return sum + duration;
   }, 0);
-  if (!weeklyMinutes) {
-    return 0;
+};
+
+const calculateCalendarMonthMinutes = (
+  schedule: WeeklyOperationalSchedule,
+): { calendarMonth: string; monthlyMinutes: number; openDays: number } | null => {
+  const entriesByDay = new Map<DayOfWeek, WeeklyScheduleEntry>();
+  schedule.schedule.forEach(entry => {
+    entriesByDay.set(entry.day, entry);
+  });
+
+  const sanitized = sanitizeCalendarMonth(schedule.calendarMonth);
+  const targetMonth = sanitized ?? getCurrentCalendarMonth();
+  const [yearStr, monthStr] = targetMonth.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return null;
   }
-  return Math.round(weeklyMinutes * baseWeeks);
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let monthlyMinutes = 0;
+  let openDays = 0;
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const jsDate = new Date(year, month - 1, day);
+    const dayOfWeek = JS_DAY_TO_DAY_OF_WEEK[jsDate.getDay()];
+    const entry = entriesByDay.get(dayOfWeek);
+    if (!entry || !entry.isOpen) {
+      continue;
+    }
+    const start = parseTimeToMinutes(entry.startTime);
+    const end = parseTimeToMinutes(entry.endTime);
+    if (start === null || end === null) {
+      continue;
+    }
+    const duration = end - start;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      continue;
+    }
+    monthlyMinutes += duration;
+    openDays += 1;
+  }
+
+  return {
+    calendarMonth: targetMonth,
+    monthlyMinutes: Math.round(monthlyMinutes),
+    openDays,
+  };
+};
+
+export interface WeeklyScheduleAnalysis {
+  weeklyPatternMinutes: number;
+  monthlyMinutesPerBed: number;
+  effectiveWeeks: number | null;
+  calendarMonth: string | null;
+  openDaysInMonth: number | null;
+  isCalendarExact: boolean;
+}
+
+export const analyzeWeeklySchedule = (schedule: WeeklyOperationalSchedule): WeeklyScheduleAnalysis => {
+  const weeklyPatternMinutes = calculateWeeklyPatternMinutes(schedule);
+  const calendarBased = calculateCalendarMonthMinutes(schedule);
+  if (calendarBased) {
+    const effectiveWeeks =
+      weeklyPatternMinutes > 0 ? calendarBased.monthlyMinutes / weeklyPatternMinutes : null;
+    return {
+      weeklyPatternMinutes,
+      monthlyMinutesPerBed: calendarBased.monthlyMinutes,
+      effectiveWeeks,
+      calendarMonth: calendarBased.calendarMonth,
+      openDaysInMonth: calendarBased.openDays,
+      isCalendarExact: true,
+    };
+  }
+
+  const fallbackWeeks =
+    typeof schedule.weeksPerMonth === 'number' && Number.isFinite(schedule.weeksPerMonth) && schedule.weeksPerMonth > 0
+      ? schedule.weeksPerMonth
+      : DEFAULT_WEEKS_PER_MONTH;
+  const monthlyMinutesPerBed = Math.round(weeklyPatternMinutes * fallbackWeeks);
+  return {
+    weeklyPatternMinutes,
+    monthlyMinutesPerBed,
+    effectiveWeeks: fallbackWeeks,
+    calendarMonth: null,
+    openDaysInMonth: null,
+    isCalendarExact: false,
+  };
 };
 
 export const calculateOperationalMinutes = (config: OperationalConfig): number => {
@@ -64,7 +164,8 @@ export const calculateOperationalMinutes = (config: OperationalConfig): number =
 
   let baseMinutes = 0;
   if (config.mode === 'weekly') {
-    baseMinutes = calculateWeeklyMinutes(config.weekly);
+    const analysis = analyzeWeeklySchedule(config.weekly);
+    baseMinutes = analysis.monthlyMinutesPerBed;
   } else {
     const days = config.simple.operatingDays;
     const hours = config.simple.operatingHoursPerDay;
@@ -81,7 +182,7 @@ export const calculateOperationalMinutes = (config: OperationalConfig): number =
 };
 
 export const calculateWeeklyOperationalMinutes = (schedule: WeeklyOperationalSchedule): number => {
-  return calculateWeeklyMinutes(schedule);
+  return calculateWeeklyPatternMinutes(schedule);
 };
 
 export const calculateStaffMinuteRate = (staff: StaffProfile): number => {

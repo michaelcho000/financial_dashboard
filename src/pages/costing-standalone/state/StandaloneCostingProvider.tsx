@@ -35,6 +35,7 @@ type StandaloneCostingAction =
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
 const DAY_SEQUENCE: WeeklyScheduleEntry['day'][] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const TIME_PATTERN = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
+const CALENDAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const sanitizeTime = (value: unknown, fallback: string): string => {
   if (typeof value !== 'string') {
@@ -58,6 +59,21 @@ const toMinutes = (time: string): number => {
     return 0;
   }
   return hours * 60 + minutes;
+};
+
+const getDefaultCalendarMonth = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+const sanitizeCalendarMonth = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return CALENDAR_MONTH_PATTERN.test(trimmed) ? trimmed : null;
 };
 
 const normalizeOperationalMode = (mode: unknown): OperationalScheduleMode => {
@@ -96,6 +112,7 @@ const normalizeWeeklySchedule = (schedule: Partial<WeeklyOperationalSchedule> | 
   return {
     schedule: normalized,
     weeksPerMonth: baseWeeks,
+    calendarMonth: sanitizeCalendarMonth(schedule?.calendarMonth) ?? getDefaultCalendarMonth(),
   };
 };
 

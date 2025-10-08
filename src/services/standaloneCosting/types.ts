@@ -17,6 +17,7 @@ export interface WeeklyScheduleEntry {
 export interface WeeklyOperationalSchedule {
   schedule: WeeklyScheduleEntry[];
   weeksPerMonth: number | null;
+  calendarMonth: string | null;
 }
 
 export interface OperationalConfig {

@@ -4,6 +4,7 @@
  */
 
 import {
+  analyzeWeeklySchedule,
   calculateOperationalMinutes,
   calculateStaffMinuteRate,
   calculateMaterialUnitCost,
@@ -23,6 +24,8 @@ import type {
 
 const DAY_SEQUENCE: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
+const JS_DAY_TO_DAY: DayOfWeek[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
 const buildWeeklySchedule = (
   overrides: Partial<Record<DayOfWeek, { isOpen: boolean; start: string; end: string }>> = {},
 ): WeeklyScheduleEntry[] =>
@@ -36,6 +39,35 @@ const buildWeeklySchedule = (
     };
   });
 
+const minutesBetween = (start: string, end: string): number => {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return eh * 60 + em - (sh * 60 + sm);
+};
+
+const computeMonthlyMinutesPerBed = (calendarMonth: string, schedule: WeeklyScheduleEntry[]): number => {
+  const [yearStr, monthStr] = calendarMonth.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const lastDay = new Date(year, month, 0).getDate();
+  const map = new Map<DayOfWeek, WeeklyScheduleEntry>();
+  schedule.forEach(entry => map.set(entry.day, entry));
+
+  let total = 0;
+  for (let day = 1; day <= lastDay; day += 1) {
+    const jsDay = new Date(year, month - 1, day).getDay();
+    const entry = map.get(JS_DAY_TO_DAY[jsDay]);
+    if (!entry || !entry.isOpen || !entry.startTime || !entry.endTime) {
+      continue;
+    }
+    const duration = minutesBetween(entry.startTime, entry.endTime);
+    if (duration > 0) {
+      total += duration;
+    }
+  }
+  return total;
+};
+
 // PRD 시나리오 1: 월 가용 시간 계산
 function testOperationalMinutes() {
   const simpleConfig: OperationalConfig = {
@@ -47,6 +79,7 @@ function testOperationalMinutes() {
     weekly: {
       schedule: buildWeeklySchedule(),
       weeksPerMonth: 4.345,
+      calendarMonth: '2025-03',
     },
     bedCount: 4,
     notes: undefined,
@@ -55,6 +88,15 @@ function testOperationalMinutes() {
   const simpleResult = calculateOperationalMinutes(simpleConfig);
   const simpleExpected = 26 * 10 * 60 * 4; // 62,400분
 
+  const weeklySchedule = buildWeeklySchedule({
+    MON: { isOpen: true, start: '10:00', end: '19:00' },
+    TUE: { isOpen: true, start: '10:00', end: '19:00' },
+    WED: { isOpen: true, start: '10:00', end: '19:00' },
+    THU: { isOpen: true, start: '10:00', end: '19:00' },
+    FRI: { isOpen: true, start: '10:00', end: '19:00' },
+    SAT: { isOpen: true, start: '10:00', end: '17:00' },
+  });
+
   const weeklyConfig: OperationalConfig = {
     mode: 'weekly',
     simple: {
@@ -62,30 +104,32 @@ function testOperationalMinutes() {
       operatingHoursPerDay: null,
     },
     weekly: {
-      schedule: buildWeeklySchedule({
-        MON: { isOpen: true, start: '10:00', end: '19:00' },
-        TUE: { isOpen: true, start: '10:00', end: '19:00' },
-        WED: { isOpen: true, start: '10:00', end: '19:00' },
-        THU: { isOpen: true, start: '10:00', end: '19:00' },
-        FRI: { isOpen: true, start: '10:00', end: '19:00' },
-        SAT: { isOpen: true, start: '10:00', end: '17:00' },
-      }),
+      schedule: weeklySchedule,
       weeksPerMonth: 4.345,
+      calendarMonth: '2025-03',
     },
     bedCount: 4,
     notes: undefined,
   };
 
   const weeklyResult = calculateOperationalMinutes(weeklyConfig);
-  const weeklyMonthlyMinutesPerBed = calculateWeeklyOperationalMinutes(weeklyConfig.weekly);
-  const weeklyExpected = Math.round(weeklyMonthlyMinutesPerBed * weeklyConfig.bedCount);
+  const expectedMonthlyMinutesPerBed = computeMonthlyMinutesPerBed('2025-03', weeklySchedule);
+  const weeklyExpected = expectedMonthlyMinutesPerBed * weeklyConfig.bedCount;
+  const weeklyPatternMinutes = calculateWeeklyOperationalMinutes(weeklyConfig.weekly);
+  const weeklyAnalysis = analyzeWeeklySchedule(weeklyConfig.weekly);
 
   console.log('✓ Test 1: 월 가용 시간 계산');
   console.log(`  단순 모드 입력: 26일 × 10시간 × 4대 = ${simpleExpected.toLocaleString()}분`);
   console.log(`  단순 모드 결과: ${simpleResult.toLocaleString()}분 (${simpleResult === simpleExpected ? '✅' : '❌'})`);
-  console.log('  주간 스케줄 입력: 월~금 10-19시, 토 10-17시, 4대, 월 4.345주');
-  console.log(`  주간 모드 기대값: ${weeklyExpected.toLocaleString()}분`);
-  console.log(`  주간 모드 결과: ${weeklyResult.toLocaleString()}분 (${weeklyResult === weeklyExpected ? '✅' : '❌'})\n`);
+  console.log('  주간 스케줄 입력: 월~금 10-19시, 토 10-17시, 기준 월 2025-03, 4대');
+  console.log(`  주간 패턴(1주): ${weeklyPatternMinutes.toLocaleString()}분`);
+  console.log(`  주간 모드 기대값: ${weeklyExpected.toLocaleString()}분 (베드당 ${expectedMonthlyMinutesPerBed.toLocaleString()}분)`);
+  console.log(`  주간 모드 결과: ${weeklyResult.toLocaleString()}분 (${weeklyResult === weeklyExpected ? '✅' : '❌'})`);
+  console.log(
+    `  분석: 월 영업일 ${weeklyAnalysis.openDaysInMonth ?? 0}일, 실효 주 수 ${
+      weeklyAnalysis.effectiveWeeks ? weeklyAnalysis.effectiveWeeks.toFixed(3) : 'N/A'
+    }주\n`,
+  );
 
   return simpleResult === simpleExpected && weeklyResult === weeklyExpected;
 }
@@ -147,6 +191,7 @@ function testProcedureBreakdown() {
     weekly: {
       schedule: buildWeeklySchedule(),
       weeksPerMonth: 4.345,
+      calendarMonth: '2025-03',
     },
     bedCount: 1,
     notes: undefined,

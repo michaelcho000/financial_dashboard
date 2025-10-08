@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  calculateOperationalMinutes,
-  calculateWeeklyOperationalMinutes,
-} from '../../../services/standaloneCosting/calculations';
+import { analyzeWeeklySchedule, calculateOperationalMinutes } from '../../../services/standaloneCosting/calculations';
 import {
   DayOfWeek,
   OperationalConfig,
@@ -27,7 +24,7 @@ interface FormState {
   simpleOperatingDays: string;
   simpleOperatingHours: string;
   bedCount: string;
-  weeksPerMonth: string;
+  calendarMonth: string;
   weekly: WeeklyDayForm[];
   notes: string;
 }
@@ -85,6 +82,13 @@ const parsePositiveInt = (value: string): number | null => {
   return integer > 0 ? integer : null;
 };
 
+const getDefaultCalendarMonth = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
 const buildFormStateFromConfig = (config: OperationalConfig): FormState => ({
   mode: config.mode,
   simpleOperatingDays:
@@ -96,10 +100,7 @@ const buildFormStateFromConfig = (config: OperationalConfig): FormState => ({
       ? String(config.simple.operatingHoursPerDay)
       : '',
   bedCount: config.bedCount !== null && config.bedCount !== undefined ? String(config.bedCount) : '1',
-  weeksPerMonth:
-    config.weekly.weeksPerMonth !== null && config.weekly.weeksPerMonth !== undefined
-      ? String(config.weekly.weeksPerMonth)
-      : String(DEFAULT_WEEKS_PER_MONTH),
+  calendarMonth: config.weekly.calendarMonth ?? getDefaultCalendarMonth(),
   weekly: createWeeklyFormState(config.weekly.schedule),
   notes: config.notes ?? '',
 });
@@ -130,21 +131,24 @@ const OperationalSettingsSection: React.FC = () => {
 
   const capacityMinutes = useMemo(() => calculateOperationalMinutes(state.operational), [state.operational]);
 
+  const weeklyAnalysis = useMemo(
+    () => analyzeWeeklySchedule(state.operational.weekly),
+    [state.operational.weekly],
+  );
+
   const weeklyCapacitySummary = useMemo(() => {
     if (state.operational.mode !== 'weekly') {
       return null;
     }
-    const monthlyMinutes = calculateWeeklyOperationalMinutes(state.operational.weekly);
-    const weeksPerMonth = state.operational.weekly.weeksPerMonth ?? DEFAULT_WEEKS_PER_MONTH;
-    const weeklyMinutes = weeksPerMonth > 0 ? Math.round(monthlyMinutes / weeksPerMonth) : 0;
-    const openDays = state.operational.weekly.schedule.filter(entry => entry.isOpen).length;
     return {
-      monthlyMinutes,
-      weeklyMinutes,
-      weeksPerMonth,
-      openDays,
+      calendarMonth: weeklyAnalysis.calendarMonth ?? form.calendarMonth ?? getDefaultCalendarMonth(),
+      monthlyMinutesPerBed: weeklyAnalysis.monthlyMinutesPerBed,
+      openDaysInMonth: weeklyAnalysis.openDaysInMonth,
+      effectiveWeeks: weeklyAnalysis.effectiveWeeks,
+      weeklyPatternMinutes: weeklyAnalysis.weeklyPatternMinutes,
+      isCalendarExact: weeklyAnalysis.isCalendarExact,
     };
-  }, [state.operational]);
+  }, [state.operational.mode, weeklyAnalysis, form.calendarMonth]);
 
   const openModal = () => {
     setIsModalOpen(true);
@@ -157,7 +161,11 @@ const OperationalSettingsSection: React.FC = () => {
   const handleModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
     if (value === 'simple' || value === 'weekly') {
-      setForm(prev => ({ ...prev, mode: value }));
+      setForm(prev => ({
+        ...prev,
+        mode: value,
+        calendarMonth: value === 'weekly' ? prev.calendarMonth || getDefaultCalendarMonth() : prev.calendarMonth,
+      }));
     }
   };
 
@@ -174,8 +182,8 @@ const OperationalSettingsSection: React.FC = () => {
     setForm(prev => ({ ...prev, bedCount: event.target.value.replace(/[^0-9]/g, '') }));
   };
 
-  const handleWeeksPerMonthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setForm(prev => ({ ...prev, weeksPerMonth: sanitizeNumericInput(event.target.value) }));
+  const handleCalendarMonthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setForm(prev => ({ ...prev, calendarMonth: event.target.value }));
   };
 
   const handleWeeklyToggle = (day: DayOfWeek) => {
@@ -204,9 +212,11 @@ const OperationalSettingsSection: React.FC = () => {
     const operatingDaysValue = parseFloatOrNull(form.simpleOperatingDays);
     const operatingHoursValue = parseFloatOrNull(form.simpleOperatingHours);
     const bedCountValue = parsePositiveInt(form.bedCount);
-    const weeksPerMonthValue = parseFloatOrNull(form.weeksPerMonth);
+    const calendarMonthValue = form.calendarMonth && form.calendarMonth.trim() ? form.calendarMonth : null;
 
     const weeklySchedule = deriveWeeklyScheduleEntries(form.weekly);
+    const fallbackWeeks =
+      state.operational.weekly.weeksPerMonth ?? DEFAULT_WEEKS_PER_MONTH;
 
     setOperationalConfig({
       mode: form.mode,
@@ -218,10 +228,8 @@ const OperationalSettingsSection: React.FC = () => {
       },
       weekly: {
         schedule: weeklySchedule,
-        weeksPerMonth:
-          typeof weeksPerMonthValue === 'number' && Number.isFinite(weeksPerMonthValue) && weeksPerMonthValue > 0
-            ? weeksPerMonthValue
-            : null,
+        weeksPerMonth: fallbackWeeks,
+        calendarMonth: calendarMonthValue,
       },
       bedCount:
         typeof bedCountValue === 'number' && Number.isFinite(bedCountValue) && bedCountValue > 0
@@ -288,22 +296,31 @@ const OperationalSettingsSection: React.FC = () => {
           ) : (
             <>
               <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-gray-500">주간 영업일</p>
+                <p className="text-sm text-gray-500">기준 월</p>
                 <p className="mt-1 text-2xl font-bold text-gray-900">
-                  {weeklyCapacitySummary?.openDays ?? 0}일/주
+                  {weeklyCapacitySummary?.calendarMonth ?? '-'}
                 </p>
+                {weeklyCapacitySummary?.isCalendarExact ? (
+                  <p className="mt-1 text-xs text-gray-500">실제 달력 기준 자동 계산</p>
+                ) : weeklyCapacitySummary?.effectiveWeeks ? (
+                  <p className="mt-1 text-xs text-gray-500">
+                    평균 {weeklyCapacitySummary.effectiveWeeks.toFixed(3)}주 기준
+                  </p>
+                ) : null}
               </div>
               <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-gray-500">주간 총 영업시간</p>
+                <p className="text-sm text-gray-500">월 총 영업시간</p>
                 <p className="mt-1 text-2xl font-bold text-gray-900">
                   {weeklyCapacitySummary
-                    ? `${Math.round((weeklyCapacitySummary.weeklyMinutes ?? 0) / 60)}시간`
+                    ? `${Math.round((weeklyCapacitySummary.monthlyMinutesPerBed ?? 0) / 60).toLocaleString('ko-KR')}시간`
                     : '-'}
                 </p>
-                {weeklyCapacitySummary && (
+                {weeklyCapacitySummary?.openDaysInMonth !== null ? (
                   <p className="mt-1 text-xs text-gray-500">
-                    월 평균 {weeklyCapacitySummary.weeksPerMonth.toFixed(3)}주 기준
+                    총 영업일 {weeklyCapacitySummary.openDaysInMonth}일 · 베드당 계산
                   </p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">베드당 계산</p>
                 )}
               </div>
             </>
@@ -443,18 +460,15 @@ const OperationalSettingsSection: React.FC = () => {
           {form.mode === 'weekly' && (
             <div className="space-y-4">
               <label className="flex flex-col gap-1 text-sm text-gray-700">
-                월 평균 주 수
+                기준 월
                 <input
-              name="weeksPerMonth"
-              type="number"
-              min={1}
-              step={0.001}
-              value={form.weeksPerMonth}
-              onChange={handleWeeksPerMonthChange}
-              className="max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              placeholder="예: 4.345"
+                  name="calendarMonth"
+                  type="month"
+                  value={form.calendarMonth}
+                  onChange={handleCalendarMonthChange}
+                  className="max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
-                <span className="text-xs text-gray-500">기본값은 1년 365일 기준 월 평균 4.345주입니다.</span>
+                <span className="text-xs text-gray-500">선택한 달의 실제 달력을 기준으로 월 가용 시간이 계산됩니다.</span>
               </label>
 
               <div className="overflow-x-auto rounded-md border border-gray-200">
