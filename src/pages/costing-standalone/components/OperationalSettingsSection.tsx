@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Settings } from 'lucide-react';
 import { analyzeWeeklySchedule, calculateOperationalMinutes } from '../../../services/standaloneCosting/calculations';
 import {
   DayOfWeek,
@@ -236,6 +237,8 @@ const OperationalSettingsSection: React.FC = () => {
   };
 
   const weeklyRows = state.operational.weekly.schedule;
+  const operationalNotes = state.operational.notes?.trim() ?? '';
+  const hasOperationalNotes = operationalNotes.length > 0;
 
   return (
     <>
@@ -247,9 +250,10 @@ const OperationalSettingsSection: React.FC = () => {
           </div>
           <button
             onClick={openModal}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
-            ⚙️ 수정
+            <Settings className="h-4 w-4" aria-hidden />
+            수정
           </button>
         </header>
 
@@ -342,12 +346,34 @@ const OperationalSettingsSection: React.FC = () => {
           </div>
         )}
 
-        {state.operational.notes && (
-          <div className="mt-3 max-w-2xl">
-            <p className="text-xs text-gray-500">메모</p>
-            <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{state.operational.notes}</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="h-full rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">월 가용 시간</p>
+                <p className="mt-2 text-3xl font-semibold text-gray-900">
+                  {capacityMinutes > 0 ? `${capacityMinutes.toLocaleString('ko-KR')}분` : '-'}
+                </p>
+              </div>
+              <HelpTooltip content="이 값을 기준으로 고정비가 시술별로 배분됩니다." />
+            </div>
+            <p className="mt-3 text-xs text-gray-500 leading-5">
+              {capacityMinutes > 0
+                ? `고정비 분당 배분율 = 월 시설·운영비 ÷ ${capacityMinutes.toLocaleString('ko-KR')}분 (베드 수 포함)`
+                : '운영 모드와 시간을 입력하면 분 단위 가용 시간이 계산됩니다.'}
+            </p>
           </div>
-        )}
+          <div className="h-full rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">메모</p>
+            <div className="mt-3">
+              {hasOperationalNotes ? (
+                <p className="text-sm text-gray-700 whitespace-pre-line">{operationalNotes}</p>
+              ) : (
+                <p className="text-sm text-gray-400">등록된 메모가 없습니다.</p>
+              )}
+            </div>
+          </div>
+        </div>
 
         {capacityMinutes === 0 && (
           <div className="mt-4">
@@ -357,21 +383,6 @@ const OperationalSettingsSection: React.FC = () => {
                 고정비 배분이 정확히 이뤄집니다.
               </p>
             </Alert>
-          </div>
-        )}
-
-        {capacityMinutes > 0 && (
-          <div className="mt-4 rounded-md border border-green-200 bg-green-50 p-4 max-w-2xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-800">월 가용 시간</p>
-                <p className="mt-1 text-xl font-bold text-green-900">{capacityMinutes.toLocaleString('ko-KR')}분</p>
-              </div>
-              <HelpTooltip content="이 값을 기준으로 고정비가 시술별로 배분됩니다." />
-            </div>
-            <p className="mt-2 text-xs text-green-700">
-              고정비 분당 배분율 = 월 시설·운영비 / {capacityMinutes.toLocaleString('ko-KR')}분 (베드 수 포함)
-            </p>
           </div>
         )}
       </section>
