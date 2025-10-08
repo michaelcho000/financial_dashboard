@@ -26,8 +26,12 @@ const StandaloneCostingContent: React.FC = () => {
   const [modalMessage, setModalMessage] = useState<string | null>(null);
 
   const hasOperationalConfig = useMemo(
-    () => state.operational.operatingDays !== null && state.operational.operatingHoursPerDay !== null,
-    [state.operational.operatingDays, state.operational.operatingHoursPerDay],
+    () =>
+      state.operational.operatingDays !== null &&
+      state.operational.operatingHoursPerDay !== null &&
+      state.operational.bedCount !== null &&
+      state.operational.bedCount > 0,
+    [state.operational.operatingDays, state.operational.operatingHoursPerDay, state.operational.bedCount],
   );
 
   const tabs: TabDefinition[] = useMemo(

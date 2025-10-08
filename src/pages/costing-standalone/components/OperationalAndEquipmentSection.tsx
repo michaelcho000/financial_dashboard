@@ -10,6 +10,7 @@ import Modal from '../../../components/common/Modal';
 interface OperationalFormState {
   operatingDays: string;
   operatingHoursPerDay: string;
+  bedCount: string;
   notes: string;
 }
 
@@ -34,6 +35,7 @@ const OperationalAndEquipmentSection: React.FC = () => {
   const [operationalForm, setOperationalForm] = useState<OperationalFormState>({
     operatingDays: '',
     operatingHoursPerDay: '',
+    bedCount: '',
     notes: ''
   });
   const [isOperationalModalOpen, setIsOperationalModalOpen] = useState(false);
@@ -44,10 +46,11 @@ const OperationalAndEquipmentSection: React.FC = () => {
 
   // Load operational config
   useEffect(() => {
-    const { operatingDays, operatingHoursPerDay, notes } = state.operational;
+    const { operatingDays, operatingHoursPerDay, bedCount, notes } = state.operational;
     setOperationalForm({
       operatingDays: operatingDays !== null && operatingDays !== undefined ? String(operatingDays) : '',
       operatingHoursPerDay: operatingHoursPerDay !== null && operatingHoursPerDay !== undefined ? String(operatingHoursPerDay) : '',
+      bedCount: bedCount !== null && bedCount !== undefined ? String(bedCount) : '',
       notes: notes ?? '',
     });
   }, [state.operational]);
@@ -74,10 +77,15 @@ const OperationalAndEquipmentSection: React.FC = () => {
     event.preventDefault();
     const operatingDaysValue = operationalForm.operatingDays.trim() ? Number(operationalForm.operatingDays) : null;
     const operatingHoursValue = operationalForm.operatingHoursPerDay.trim() ? Number(operationalForm.operatingHoursPerDay) : null;
+    const bedCountValue = operationalForm.bedCount.trim() ? Number(operationalForm.bedCount) : null;
 
     setOperationalConfig({
       operatingDays: typeof operatingDaysValue === 'number' && Number.isFinite(operatingDaysValue) ? operatingDaysValue : null,
       operatingHoursPerDay: typeof operatingHoursValue === 'number' && Number.isFinite(operatingHoursValue) ? operatingHoursValue : null,
+      bedCount:
+        typeof bedCountValue === 'number' && Number.isFinite(bedCountValue) && bedCountValue > 0
+          ? Math.floor(bedCountValue)
+          : 1,
       notes: operationalForm.notes.trim() || undefined,
     });
     setIsOperationalModalOpen(false);
@@ -172,7 +180,7 @@ const OperationalAndEquipmentSection: React.FC = () => {
         </header>
 
         {/* 4칸 KPI 그리드 */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-center shadow-sm">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">영업일수</p>
             <p className="mt-2 text-3xl font-bold text-gray-900">
@@ -186,6 +194,14 @@ const OperationalAndEquipmentSection: React.FC = () => {
             <p className="mt-2 text-3xl font-bold text-gray-900">
               {state.operational.operatingHoursPerDay ?? '-'}
               {state.operational.operatingHoursPerDay !== null && <span className="text-lg text-gray-600 ml-1">시간</span>}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-center shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">동시 운영 베드 수</p>
+            <p className="mt-2 text-3xl font-bold text-gray-900">
+              {state.operational.bedCount ?? '-'}
+              {state.operational.bedCount !== null && <span className="text-lg text-gray-600 ml-1">대</span>}
             </p>
           </div>
 
@@ -217,7 +233,7 @@ const OperationalAndEquipmentSection: React.FC = () => {
           <div className="mt-4">
             <Alert variant="warning" title="운영 세팅이 설정되지 않았습니다">
               <p>
-                월 영업일수와 1일 영업시간을 입력해야 고정비 배분이 계산됩니다.
+                월 영업일수, 1일 영업시간, 동시 운영 가능한 베드 수를 입력해야 고정비 배분이 계산됩니다.
                 현재는 고정비가 시술 원가에 반영되지 않습니다.
               </p>
             </Alert>
@@ -368,6 +384,20 @@ const OperationalAndEquipmentSection: React.FC = () => {
               onChange={handleOperationalChange}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
               placeholder="예: 10"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm text-gray-700">
+            동시 운영 베드 수
+            <input
+              name="bedCount"
+              type="number"
+              min={1}
+              step={1}
+              value={operationalForm.bedCount}
+              onChange={handleOperationalChange}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              placeholder="예: 4"
             />
           </label>
 

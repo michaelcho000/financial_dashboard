@@ -29,8 +29,28 @@ type StandaloneCostingAction =
   | { type: 'REMOVE_PROCEDURE'; payload: { id: string } }
   | { type: 'SET_BREAKDOWNS' };
 
+const normalizeOperationalConfig = (config: Partial<OperationalConfig> | undefined): OperationalConfig => {
+  const safe = config ?? {};
+  const operatingDays =
+    typeof safe.operatingDays === 'number' && Number.isFinite(safe.operatingDays) ? safe.operatingDays : null;
+  const operatingHoursPerDay =
+    typeof safe.operatingHoursPerDay === 'number' && Number.isFinite(safe.operatingHoursPerDay)
+      ? safe.operatingHoursPerDay
+      : null;
+  const bedInput = safe.bedCount;
+  const normalizedBedCount =
+    typeof bedInput === 'number' && Number.isFinite(bedInput) && bedInput > 0 ? Math.floor(bedInput) : 1;
+
+  return {
+    operatingDays,
+    operatingHoursPerDay,
+    bedCount: normalizedBedCount,
+    notes: safe.notes ?? undefined,
+  };
+};
+
 const buildInitialState = (): StandaloneCostingState => ({
-  operational: { operatingDays: null, operatingHoursPerDay: null, notes: undefined },
+  operational: normalizeOperationalConfig(undefined),
   equipment: [],
   useEquipmentHierarchy: false,
   staff: [],
@@ -63,16 +83,18 @@ const normalizeFixedCosts = (items: FixedCostItem[]): FixedCostItem[] => items.m
 
 const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true): StandaloneCostingState => {
   const normalizedFixedCosts = normalizeFixedCosts(state.fixedCosts);
+  const normalizedOperational = normalizeOperationalConfig(state.operational);
   const breakdowns = buildAllBreakdowns(state.procedures, {
     staff: state.staff,
     materials: state.materials,
     fixedCosts: normalizedFixedCosts,
-    operational: state.operational,
+    operational: normalizedOperational,
   });
 
   return {
     ...state,
     fixedCosts: normalizedFixedCosts,
+    operational: normalizedOperational,
     breakdowns,
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
   };
@@ -85,7 +107,7 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
     case 'RESET':
       return buildInitialState();
     case 'SET_OPERATIONAL':
-      return recalcBreakdowns({ ...state, operational: action.payload });
+      return recalcBreakdowns({ ...state, operational: normalizeOperationalConfig(action.payload) });
     case 'SET_EQUIPMENT_HIERARCHY':
       return recalcBreakdowns({ ...state, useEquipmentHierarchy: action.payload });
     case 'UPSERT_EQUIPMENT': {
@@ -361,5 +383,4 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
-
 

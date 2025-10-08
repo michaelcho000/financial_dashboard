@@ -23,13 +23,16 @@ function testOperationalMinutes() {
   const config: OperationalConfig = {
     operatingDays: 26,
     operatingHoursPerDay: 10,
+    bedCount: 4,
   };
 
   const result = calculateOperationalMinutes(config);
-  const expected = 26 * 10 * 60; // 15,600분
+  const expected = 26 * 10 * 60 * 4; // 62,400분
 
   console.log('✓ Test 1: 월 가용 시간 계산');
-  console.log(`  입력: ${config.operatingDays}일 × ${config.operatingHoursPerDay}시간`);
+  console.log(
+    `  입력: ${config.operatingDays}일 × ${config.operatingHoursPerDay}시간 × ${config.bedCount}대`
+  );
   console.log(`  기대값: ${expected.toLocaleString()}분`);
   console.log(`  실제값: ${result.toLocaleString()}분`);
   console.log(`  결과: ${result === expected ? '✅ PASS' : '❌ FAIL'}\n`);
@@ -88,6 +91,7 @@ function testProcedureBreakdown() {
   const operational: OperationalConfig = {
     operatingDays: 26,
     operatingHoursPerDay: 10,
+    bedCount: 1,
   };
 
   const staff: StaffProfile[] = [
@@ -158,7 +162,8 @@ function testProcedureBreakdown() {
   const staffRate = 8_000_000 / (22 * 8 * 60); // 757.58 won/분
   const expectedDirectLabor = staffRate * 15; // 11,363.64원
   const expectedConsumable = (50_000 / 10) * 5; // 25,000원
-  const operationalMinutes = 26 * 10 * 60; // 15,600분
+  const bedCount = 1;
+  const operationalMinutes = 26 * 10 * 60 * bedCount; // 15,600분
   const fixedPerMinute = 3_000_000 / operationalMinutes; // 192.31 won/분
   const expectedFixedAllocated = fixedPerMinute * 30; // 5,769.23원
   const expectedTotalCost = expectedDirectLabor + expectedConsumable + expectedFixedAllocated; // 42,132.87원

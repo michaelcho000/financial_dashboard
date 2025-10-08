@@ -1,8 +1,8 @@
 ﻿import axios from 'axios';
-import { FixedCostGroup, FixedCostItem, StandaloneCostingState } from './types';
+import { FixedCostGroup, FixedCostItem, OperationalConfig, StandaloneCostingState } from './types';
 
 const API_PATH = '/api/standalone-costing';
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 export interface LoadedDraftResult {
   state: StandaloneCostingState;
@@ -29,8 +29,28 @@ const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category
   };
 };
 
+const normalizeOperationalConfig = (config: Partial<OperationalConfig> | undefined): OperationalConfig => {
+  const safe = config ?? {};
+  const operatingDays =
+    typeof safe.operatingDays === 'number' && Number.isFinite(safe.operatingDays) ? safe.operatingDays : null;
+  const operatingHoursPerDay =
+    typeof safe.operatingHoursPerDay === 'number' && Number.isFinite(safe.operatingHoursPerDay)
+      ? safe.operatingHoursPerDay
+      : null;
+  const bedInput = safe.bedCount;
+  const bedCount =
+    typeof bedInput === 'number' && Number.isFinite(bedInput) && bedInput > 0 ? Math.floor(bedInput) : 1;
+
+  return {
+    operatingDays,
+    operatingHoursPerDay,
+    bedCount,
+    notes: safe.notes ?? undefined,
+  };
+};
+
 const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
-  operational: state.operational ?? { operatingDays: null, operatingHoursPerDay: null, notes: undefined },
+  operational: normalizeOperationalConfig(state.operational),
   equipment: state.equipment ?? [],
   useEquipmentHierarchy: state.useEquipmentHierarchy ?? false,
   staff: state.staff ?? [],
@@ -113,4 +133,3 @@ export const clearDraft = async (): Promise<void> => {
     console.error('[StandaloneCosting] Failed to clear draft', error);
   }
 };
-

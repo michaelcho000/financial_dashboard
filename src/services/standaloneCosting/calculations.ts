@@ -6,7 +6,11 @@ export const calculateOperationalMinutes = (config: OperationalConfig): number =
   if (!config.operatingDays || !config.operatingHoursPerDay) {
     return 0;
   }
-  return config.operatingDays * config.operatingHoursPerDay * MINUTES_IN_HOUR;
+  const beds = config.bedCount ?? 1;
+  if (!beds || beds <= 0) {
+    return 0;
+  }
+  return config.operatingDays * config.operatingHoursPerDay * MINUTES_IN_HOUR * beds;
 };
 
 export const calculateStaffMinuteRate = (staff: StaffProfile): number => {
@@ -128,4 +132,3 @@ export const buildAllBreakdowns = (procedures: ProcedureFormValues[], context: {
 }): ProcedureCostBreakdown[] => {
   return procedures.map(procedure => buildProcedureBreakdown(procedure, context));
 };
-

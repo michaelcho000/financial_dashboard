@@ -1,6 +1,7 @@
 ﻿export interface OperationalConfig {
   operatingDays: number | null;
   operatingHoursPerDay: number | null;
+  bedCount: number | null;
   notes?: string;
 }
 
@@ -88,4 +89,3 @@ export interface StandaloneCostingDraft {
   state: StandaloneCostingState;
   version: number;
 }
-
