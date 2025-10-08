@@ -252,56 +252,56 @@ const OperationalSettingsSection: React.FC = () => {
           </button>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl">
-          <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800">운영 모드</p>
-            <p className="mt-1 text-2xl font-bold text-blue-900">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-500">운영 모드</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
               {form.mode === 'weekly' ? '요일별 스케줄' : '월별 총량'}
             </p>
             {savedAt && (
-              <p className="mt-1 text-xs text-blue-700">
+              <p className="mt-1 text-xs text-gray-500">
                 마지막 저장: {new Date(savedAt).toLocaleString('ko-KR')}
               </p>
             )}
           </div>
 
-          <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800">동시 운영 베드 수</p>
-            <p className="mt-1 text-2xl font-bold text-blue-900">{state.operational.bedCount ?? '-'}대</p>
+          <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-500">동시 운영 베드 수</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{state.operational.bedCount ?? '-'}대</p>
           </div>
 
           {state.operational.mode === 'simple' ? (
             <>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm text-blue-800">월 영업일수</p>
-                <p className="mt-1 text-2xl font-bold text-blue-900">
+              <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-500">월 영업일수</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
                   {state.operational.simple.operatingDays ?? '-'}일
                 </p>
               </div>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm text-blue-800">일 영업시간</p>
-                <p className="mt-1 text-2xl font-bold text-blue-900">
+              <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-500">일 영업시간</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
                   {state.operational.simple.operatingHoursPerDay ?? '-'}시간
                 </p>
               </div>
             </>
           ) : (
             <>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm text-blue-800">주간 영업일</p>
-                <p className="mt-1 text-2xl font-bold text-blue-900">
+              <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-500">주간 영업일</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
                   {weeklyCapacitySummary?.openDays ?? 0}일/주
                 </p>
               </div>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm text-blue-800">주간 총 영업시간</p>
-                <p className="mt-1 text-2xl font-bold text-blue-900">
+              <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-500">주간 총 영업시간</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
                   {weeklyCapacitySummary
                     ? `${Math.round((weeklyCapacitySummary.weeklyMinutes ?? 0) / 60)}시간`
                     : '-'}
                 </p>
                 {weeklyCapacitySummary && (
-                  <p className="mt-1 text-xs text-blue-700">
+                  <p className="mt-1 text-xs text-gray-500">
                     월 평균 {weeklyCapacitySummary.weeksPerMonth.toFixed(3)}주 기준
                   </p>
                 )}
@@ -445,14 +445,14 @@ const OperationalSettingsSection: React.FC = () => {
               <label className="flex flex-col gap-1 text-sm text-gray-700">
                 월 평균 주 수
                 <input
-                  name="weeksPerMonth"
-                  type="number"
-                  min={1}
-                  step={0.001}
-                  value={form.weeksPerMonth}
-                  onChange={handleWeeksPerMonthChange}
-                  className="max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  placeholder="예: 4.345"
+              name="weeksPerMonth"
+              type="number"
+              min={1}
+              step={0.001}
+              value={form.weeksPerMonth}
+              onChange={handleWeeksPerMonthChange}
+              className="max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              placeholder="예: 4.345"
                 />
                 <span className="text-xs text-gray-500">기본값은 1년 365일 기준 월 평균 4.345주입니다.</span>
               </label>
@@ -481,22 +481,22 @@ const OperationalSettingsSection: React.FC = () => {
                             진료
                           </label>
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="px-2 py-2">
                           <input
                             type="time"
                             value={entry.startTime}
                             onChange={event => handleWeeklyTimeChange(entry.day, 'startTime', event.target.value)}
-                            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                             disabled={!entry.isOpen}
                             step={300}
                           />
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="px-2 py-2">
                           <input
                             type="time"
                             value={entry.endTime}
                             onChange={event => handleWeeklyTimeChange(entry.day, 'endTime', event.target.value)}
-                            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                             disabled={!entry.isOpen}
                             step={300}
                           />
