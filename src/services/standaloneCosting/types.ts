@@ -1,6 +1,28 @@
-﻿export interface OperationalConfig {
+﻿export type OperationalScheduleMode = 'simple' | 'weekly';
+
+export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+
+export interface SimpleOperationalSchedule {
   operatingDays: number | null;
   operatingHoursPerDay: number | null;
+}
+
+export interface WeeklyScheduleEntry {
+  day: DayOfWeek;
+  isOpen: boolean;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export interface WeeklyOperationalSchedule {
+  schedule: WeeklyScheduleEntry[];
+  weeksPerMonth: number | null;
+}
+
+export interface OperationalConfig {
+  mode: OperationalScheduleMode;
+  simple: SimpleOperationalSchedule;
+  weekly: WeeklyOperationalSchedule;
   bedCount: number | null;
   notes?: string;
 }

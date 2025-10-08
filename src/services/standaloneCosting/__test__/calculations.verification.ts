@@ -9,35 +9,85 @@ import {
   calculateMaterialUnitCost,
   buildProcedureBreakdown,
   summarizeFixedCosts,
+  calculateWeeklyOperationalMinutes,
 } from '../calculations';
 import type {
+  DayOfWeek,
   OperationalConfig,
   StaffProfile,
   MaterialItem,
   FixedCostItem,
   ProcedureFormValues,
+  WeeklyScheduleEntry,
 } from '../types';
+
+const DAY_SEQUENCE: DayOfWeek[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+const buildWeeklySchedule = (
+  overrides: Partial<Record<DayOfWeek, { isOpen: boolean; start: string; end: string }>> = {},
+): WeeklyScheduleEntry[] =>
+  DAY_SEQUENCE.map(day => {
+    const override = overrides[day];
+    return {
+      day,
+      isOpen: override?.isOpen ?? false,
+      startTime: override?.start ?? '09:00',
+      endTime: override?.end ?? '18:00',
+    };
+  });
 
 // PRD 시나리오 1: 월 가용 시간 계산
 function testOperationalMinutes() {
-  const config: OperationalConfig = {
-    operatingDays: 26,
-    operatingHoursPerDay: 10,
+  const simpleConfig: OperationalConfig = {
+    mode: 'simple',
+    simple: {
+      operatingDays: 26,
+      operatingHoursPerDay: 10,
+    },
+    weekly: {
+      schedule: buildWeeklySchedule(),
+      weeksPerMonth: 4.345,
+    },
     bedCount: 4,
+    notes: undefined,
   };
 
-  const result = calculateOperationalMinutes(config);
-  const expected = 26 * 10 * 60 * 4; // 62,400분
+  const simpleResult = calculateOperationalMinutes(simpleConfig);
+  const simpleExpected = 26 * 10 * 60 * 4; // 62,400분
+
+  const weeklyConfig: OperationalConfig = {
+    mode: 'weekly',
+    simple: {
+      operatingDays: null,
+      operatingHoursPerDay: null,
+    },
+    weekly: {
+      schedule: buildWeeklySchedule({
+        MON: { isOpen: true, start: '10:00', end: '19:00' },
+        TUE: { isOpen: true, start: '10:00', end: '19:00' },
+        WED: { isOpen: true, start: '10:00', end: '19:00' },
+        THU: { isOpen: true, start: '10:00', end: '19:00' },
+        FRI: { isOpen: true, start: '10:00', end: '19:00' },
+        SAT: { isOpen: true, start: '10:00', end: '17:00' },
+      }),
+      weeksPerMonth: 4.345,
+    },
+    bedCount: 4,
+    notes: undefined,
+  };
+
+  const weeklyResult = calculateOperationalMinutes(weeklyConfig);
+  const weeklyMonthlyMinutesPerBed = calculateWeeklyOperationalMinutes(weeklyConfig.weekly);
+  const weeklyExpected = Math.round(weeklyMonthlyMinutesPerBed * weeklyConfig.bedCount);
 
   console.log('✓ Test 1: 월 가용 시간 계산');
-  console.log(
-    `  입력: ${config.operatingDays}일 × ${config.operatingHoursPerDay}시간 × ${config.bedCount}대`
-  );
-  console.log(`  기대값: ${expected.toLocaleString()}분`);
-  console.log(`  실제값: ${result.toLocaleString()}분`);
-  console.log(`  결과: ${result === expected ? '✅ PASS' : '❌ FAIL'}\n`);
+  console.log(`  단순 모드 입력: 26일 × 10시간 × 4대 = ${simpleExpected.toLocaleString()}분`);
+  console.log(`  단순 모드 결과: ${simpleResult.toLocaleString()}분 (${simpleResult === simpleExpected ? '✅' : '❌'})`);
+  console.log('  주간 스케줄 입력: 월~금 10-19시, 토 10-17시, 4대, 월 4.345주');
+  console.log(`  주간 모드 기대값: ${weeklyExpected.toLocaleString()}분`);
+  console.log(`  주간 모드 결과: ${weeklyResult.toLocaleString()}분 (${weeklyResult === weeklyExpected ? '✅' : '❌'})\n`);
 
-  return result === expected;
+  return simpleResult === simpleExpected && weeklyResult === weeklyExpected;
 }
 
 // PRD 시나리오 2: 인력 분당 단가 계산
@@ -89,9 +139,17 @@ function testMaterialUnitCost() {
 function testProcedureBreakdown() {
   // 설정
   const operational: OperationalConfig = {
-    operatingDays: 26,
-    operatingHoursPerDay: 10,
+    mode: 'simple',
+    simple: {
+      operatingDays: 26,
+      operatingHoursPerDay: 10,
+    },
+    weekly: {
+      schedule: buildWeeklySchedule(),
+      weeksPerMonth: 4.345,
+    },
     bedCount: 1,
+    notes: undefined,
   };
 
   const staff: StaffProfile[] = [

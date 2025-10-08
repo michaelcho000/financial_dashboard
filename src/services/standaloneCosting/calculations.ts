@@ -1,16 +1,87 @@
-﻿import { FixedCostGroup, FixedCostItem, MaterialItem, MaterialUsage, OperationalConfig, ProcedureCostBreakdown, ProcedureFormValues, StaffAssignment, StaffProfile } from './types';
+﻿import {
+  FixedCostGroup,
+  FixedCostItem,
+  MaterialItem,
+  MaterialUsage,
+  OperationalConfig,
+  ProcedureCostBreakdown,
+  ProcedureFormValues,
+  StaffAssignment,
+  StaffProfile,
+  WeeklyOperationalSchedule,
+} from './types';
 
 const MINUTES_IN_HOUR = 60;
+const DEFAULT_WEEKS_PER_MONTH = 4.345;
+
+const parseTimeToMinutes = (time: string | null): number | null => {
+  if (!time) {
+    return null;
+  }
+  const [hourStr, minuteStr] = time.split(':');
+  if (minuteStr === undefined) {
+    return null;
+  }
+  const hours = Number(hourStr);
+  const minutes = Number(minuteStr);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+  return hours * MINUTES_IN_HOUR + minutes;
+};
+
+const calculateWeeklyMinutes = (schedule: WeeklyOperationalSchedule): number => {
+  const baseWeeks = schedule.weeksPerMonth ?? DEFAULT_WEEKS_PER_MONTH;
+  if (!Number.isFinite(baseWeeks) || baseWeeks <= 0) {
+    return 0;
+  }
+  const weeklyMinutes = schedule.schedule.reduce((sum, entry) => {
+    if (!entry.isOpen) {
+      return sum;
+    }
+    const start = parseTimeToMinutes(entry.startTime);
+    const end = parseTimeToMinutes(entry.endTime);
+    if (start === null || end === null) {
+      return sum;
+    }
+    const duration = end - start;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return sum;
+    }
+    return sum + duration;
+  }, 0);
+  if (!weeklyMinutes) {
+    return 0;
+  }
+  return Math.round(weeklyMinutes * baseWeeks);
+};
 
 export const calculateOperationalMinutes = (config: OperationalConfig): number => {
-  if (!config.operatingDays || !config.operatingHoursPerDay) {
+  const bedCount = config.bedCount ?? 1;
+  if (!Number.isFinite(bedCount) || bedCount <= 0) {
     return 0;
   }
-  const beds = config.bedCount ?? 1;
-  if (!beds || beds <= 0) {
+
+  let baseMinutes = 0;
+  if (config.mode === 'weekly') {
+    baseMinutes = calculateWeeklyMinutes(config.weekly);
+  } else {
+    const days = config.simple.operatingDays;
+    const hours = config.simple.operatingHoursPerDay;
+    if (Number.isFinite(days) && Number.isFinite(hours) && days && hours) {
+      baseMinutes = days * hours * MINUTES_IN_HOUR;
+    }
+  }
+
+  if (!baseMinutes) {
     return 0;
   }
-  return config.operatingDays * config.operatingHoursPerDay * MINUTES_IN_HOUR * beds;
+
+  return Math.round(baseMinutes * bedCount);
+};
+
+export const calculateWeeklyOperationalMinutes = (schedule: WeeklyOperationalSchedule): number => {
+  return calculateWeeklyMinutes(schedule);
 };
 
 export const calculateStaffMinuteRate = (staff: StaffProfile): number => {

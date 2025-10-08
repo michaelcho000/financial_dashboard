@@ -11,6 +11,7 @@ import MarketingInsightsSection from './components/MarketingInsightsSection';
 import ProcedureEditorModal from './components/ProcedureEditorModal';
 import { StandaloneCostingProvider, useStandaloneCosting } from './state/StandaloneCostingProvider';
 import CostingErrorBoundary from '../../components/common/CostingErrorBoundary';
+import { calculateOperationalMinutes } from '../../services/standaloneCosting/calculations';
 
 interface TabDefinition {
   id: string;
@@ -25,14 +26,7 @@ const StandaloneCostingContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('operational');
   const [modalMessage, setModalMessage] = useState<string | null>(null);
 
-  const hasOperationalConfig = useMemo(
-    () =>
-      state.operational.operatingDays !== null &&
-      state.operational.operatingHoursPerDay !== null &&
-      state.operational.bedCount !== null &&
-      state.operational.bedCount > 0,
-    [state.operational.operatingDays, state.operational.operatingHoursPerDay, state.operational.bedCount],
-  );
+  const hasOperationalConfig = useMemo(() => calculateOperationalMinutes(state.operational) > 0, [state.operational]);
 
   const tabs: TabDefinition[] = useMemo(
     () => [

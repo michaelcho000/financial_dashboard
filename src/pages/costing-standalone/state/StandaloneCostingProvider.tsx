@@ -7,9 +7,12 @@ import {
   FixedCostItem,
   MaterialItem,
   OperationalConfig,
+  OperationalScheduleMode,
   ProcedureFormValues,
   StandaloneCostingState,
   StaffProfile,
+  WeeklyOperationalSchedule,
+  WeeklyScheduleEntry,
 } from '../../../services/standaloneCosting/types';
 
 type StandaloneCostingAction =
@@ -29,21 +32,106 @@ type StandaloneCostingAction =
   | { type: 'REMOVE_PROCEDURE'; payload: { id: string } }
   | { type: 'SET_BREAKDOWNS' };
 
-const normalizeOperationalConfig = (config: Partial<OperationalConfig> | undefined): OperationalConfig => {
+const DEFAULT_WEEKS_PER_MONTH = 4.345;
+const DAY_SEQUENCE: WeeklyScheduleEntry['day'][] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+const TIME_PATTERN = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
+
+const sanitizeTime = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  const match = TIME_PATTERN.exec(trimmed);
+  if (!match) {
+    return fallback;
+  }
+  const hour = String(Number(match[1])).padStart(2, '0');
+  const minute = match[2];
+  return `${hour}:${minute}`;
+};
+
+const toMinutes = (time: string): number => {
+  const [hour, minute] = time.split(':');
+  const hours = Number(hour);
+  const minutes = Number(minute);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return 0;
+  }
+  return hours * 60 + minutes;
+};
+
+const normalizeOperationalMode = (mode: unknown): OperationalScheduleMode => {
+  return mode === 'weekly' ? 'weekly' : 'simple';
+};
+
+const normalizeWeeklySchedule = (schedule: Partial<WeeklyOperationalSchedule> | undefined): WeeklyOperationalSchedule => {
+  const baseWeeks =
+    typeof schedule?.weeksPerMonth === 'number' && Number.isFinite(schedule.weeksPerMonth) && schedule.weeksPerMonth > 0
+      ? schedule.weeksPerMonth
+      : DEFAULT_WEEKS_PER_MONTH;
+
+  const entriesByDay = new Map<string, WeeklyScheduleEntry>();
+  if (Array.isArray(schedule?.schedule)) {
+    schedule?.schedule.forEach(entry => {
+      if (entry && typeof entry.day === 'string') {
+        entriesByDay.set(entry.day, entry as WeeklyScheduleEntry);
+      }
+    });
+  }
+
+  const normalized: WeeklyScheduleEntry[] = DAY_SEQUENCE.map(day => {
+    const existing = entriesByDay.get(day);
+    const startTime = sanitizeTime(existing?.startTime ?? null, '09:00');
+    const endTime = sanitizeTime(existing?.endTime ?? null, '18:00');
+    const duration = toMinutes(endTime) - toMinutes(startTime);
+    const isOpen = Boolean(existing?.isOpen && duration > 0);
+    return {
+      day,
+      isOpen,
+      startTime,
+      endTime,
+    };
+  });
+
+  return {
+    schedule: normalized,
+    weeksPerMonth: baseWeeks,
+  };
+};
+
+const normalizeOperationalConfig = (
+  config:
+    | (Partial<OperationalConfig> & {
+        operatingDays?: unknown;
+        operatingHoursPerDay?: unknown;
+      })
+    | undefined,
+): OperationalConfig => {
   const safe = config ?? {};
-  const operatingDays =
-    typeof safe.operatingDays === 'number' && Number.isFinite(safe.operatingDays) ? safe.operatingDays : null;
-  const operatingHoursPerDay =
-    typeof safe.operatingHoursPerDay === 'number' && Number.isFinite(safe.operatingHoursPerDay)
-      ? safe.operatingHoursPerDay
-      : null;
-  const bedInput = safe.bedCount;
+  const simpleSource = safe.simple ?? {
+    operatingDays: (safe as { operatingDays?: unknown }).operatingDays,
+    operatingHoursPerDay: (safe as { operatingHoursPerDay?: unknown }).operatingHoursPerDay,
+  };
+
+  const simple = {
+    operatingDays:
+      typeof simpleSource?.operatingDays === 'number' && Number.isFinite(simpleSource.operatingDays)
+        ? simpleSource.operatingDays
+        : null,
+    operatingHoursPerDay:
+      typeof simpleSource?.operatingHoursPerDay === 'number' && Number.isFinite(simpleSource.operatingHoursPerDay)
+        ? simpleSource.operatingHoursPerDay
+        : null,
+  };
+
+  const bedInput = (safe as { bedCount?: unknown }).bedCount;
   const normalizedBedCount =
     typeof bedInput === 'number' && Number.isFinite(bedInput) && bedInput > 0 ? Math.floor(bedInput) : 1;
 
   return {
-    operatingDays,
-    operatingHoursPerDay,
+    mode: normalizeOperationalMode(safe.mode),
+    simple,
+    weekly: normalizeWeeklySchedule(safe.weekly),
     bedCount: normalizedBedCount,
     notes: safe.notes ?? undefined,
   };
@@ -383,4 +471,3 @@ export const useStandaloneCosting = (): StandaloneCostingContextValue => {
   }
   return context;
 };
-
