@@ -6,6 +6,7 @@ import { generateId } from '../../../utils/id';
 import { calculateMonthlyFixedTotal, summarizeFixedCosts } from '../../../services/standaloneCosting/calculations';
 import HelpTooltip from './HelpTooltip';
 import Modal from '../../../components/common/Modal';
+import PhaseSaveControls from './PhaseSaveControls';
 
 interface FixedCostFormState {
   id: string | null;
@@ -238,6 +239,8 @@ const FixedCostManagementSection: React.FC = () => {
             전체 합계: <span className="font-semibold text-gray-900">{formatKrw(total)}</span>
           </div>
         </header>
+
+        <PhaseSaveControls phaseId="fixedCosts" className="mb-4" />
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600">
             <p className="font-semibold text-gray-700">시설·운영비</p>
@@ -353,8 +356,6 @@ const FixedCostManagementSection: React.FC = () => {
 };
 
 export default FixedCostManagementSection;
-
-
 
 
 

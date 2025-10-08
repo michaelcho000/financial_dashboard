@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw } from '../../../utils/formatters';
+import PhaseSaveControls from './PhaseSaveControls';
 
 const ProcedureManagementSection: React.FC = () => {
   const { state, removeProcedure, openProcedureEditor } = useStandaloneCosting();
@@ -27,6 +28,8 @@ const ProcedureManagementSection: React.FC = () => {
           + 시술 등록
         </button>
       </header>
+
+      <PhaseSaveControls phaseId="procedures" className="mb-4" />
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">

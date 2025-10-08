@@ -185,8 +185,17 @@ export const calculateWeeklyOperationalMinutes = (schedule: WeeklyOperationalSch
   return calculateWeeklyPatternMinutes(schedule);
 };
 
+const getStaffMonthlyMinutes = (staff: StaffProfile): number => {
+  const derived = staff.workPattern?.derivedMonthlyMinutes;
+  if (typeof derived === 'number' && Number.isFinite(derived) && derived > 0) {
+    return derived;
+  }
+  const fallback = staff.workDaysPerMonth * staff.workHoursPerDay * MINUTES_IN_HOUR;
+  return Number.isFinite(fallback) ? fallback : 0;
+};
+
 export const calculateStaffMinuteRate = (staff: StaffProfile): number => {
-  const totalMinutes = staff.workDaysPerMonth * staff.workHoursPerDay * MINUTES_IN_HOUR;
+  const totalMinutes = getStaffMonthlyMinutes(staff);
   if (!totalMinutes) {
     return 0;
   }

@@ -5,6 +5,7 @@ import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { formatKrw, formatNumberInput, parseNumberInput } from '../../../utils/formatters';
 import { generateId } from '../../../utils/id';
 import Modal from '../../../components/common/Modal';
+import PhaseSaveControls from './PhaseSaveControls';
 
 interface MaterialFormState {
   id: string | null;
@@ -130,6 +131,8 @@ const MaterialManagementSection: React.FC = () => {
             + 소모품 추가
           </button>
         </header>
+
+        <PhaseSaveControls phaseId="materials" className="mb-4" />
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">

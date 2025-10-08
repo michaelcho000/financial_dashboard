@@ -32,5 +32,6 @@ View your app in AI Studio: https://ai.studio/apps/drive/1WySWOPavI81PyhU_Bx3bwt
 
 ### Supabase 연결 검증
 
-- 환경 변수가 설정된 뒤 `npm run supabase:check` 명령으로 Supabase 쓰기/읽기 연결을 미리 확인할 수 있습니다. 이 스크립트는 `.env` 를 자동으로 로드하며, `app_state` 테이블에 기본 행이 없으면 초기화합니다.
+- 환경 변수가 설정된 뒤 `npm run supabase:check` 명령으로 Supabase 쓰기/읽기 연결과 코스팅용 주요 테이블(`month_baselines`, `procedure_definitions`)을 미리 확인할 수 있습니다. 이 스크립트는 `.env` 를 자동으로 로드하며, `app_state` 테이블에 기본 행이 없으면 초기화합니다.
+- 신규 코스팅 스키마는 `db/migrations/20241012_costing_module.sql`을 Supabase에서 실행해 적용합니다. (테이블이 이미 존재하면 `CREATE ... IF NOT EXISTS` 구문으로 안전하게 건너뜁니다.)
 - 초기 샘플 데이터를 Supabase에 다시 적재해야 할 때는 `ALLOW_SUPABASE_SEED=true npm run supabase:seed` 처럼 실행합니다. **주의:** 이 스크립트는 기존 데이터를 덮어쓰므로 개발용 이외에는 사용하지 마세요.

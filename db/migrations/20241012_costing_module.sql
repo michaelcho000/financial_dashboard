@@ -1,4 +1,4 @@
-﻿-- Procedure costing module schema (Phase 1)
+-- Procedure costing module schema (Phase 1)
 -- Generated on 2025-09-26
 
 BEGIN;
@@ -42,9 +42,11 @@ CREATE TABLE IF NOT EXISTS procedure_definitions (
     name TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (tenant_id, LOWER(name))
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_procedure_definitions_tenant_lower_name
+    ON procedure_definitions (tenant_id, LOWER(name));
 
 CREATE TABLE IF NOT EXISTS staff_capacities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -191,6 +193,7 @@ COMMIT;
 --   DROP TABLE IF EXISTS procedure_variants;
 --   DROP TABLE IF EXISTS consumable_prices;
 --   DROP TABLE IF EXISTS staff_capacities;
+--   DROP INDEX IF EXISTS idx_procedure_definitions_tenant_lower_name;
 --   DROP TABLE IF EXISTS procedure_definitions;
 --   DROP TABLE IF EXISTS baseline_fixed_cost_links;
 --   DROP TABLE IF EXISTS month_baselines;

@@ -2,6 +2,21 @@
 
 export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
 
+export type CostingPhaseId =
+  | 'operational'
+  | 'staff'
+  | 'materials'
+  | 'fixedCosts'
+  | 'procedures'
+  | 'catalog'
+  | 'results'
+  | 'marketing';
+
+export interface CostingPhaseStatus {
+  lastSavedAt: string | null;
+  checksum: string | null;
+}
+
 export interface SimpleOperationalSchedule {
   operatingDays: number | null;
   operatingHoursPerDay: number | null;
@@ -20,6 +35,32 @@ export interface WeeklyOperationalSchedule {
   calendarMonth: string | null;
 }
 
+export interface StaffWorkPatternMonthly {
+  workDaysPerMonth: number;
+  workHoursPerDay: number;
+}
+
+export interface StaffWorkPatternWeeklyByHours {
+  workDaysPerWeek: number;
+  workHoursPerWeek: number | null;
+  workHoursPerDay: number | null;
+}
+
+export interface StaffWorkPatternDaily {
+  workDaysPerWeek: number;
+  workHoursPerDay: number;
+}
+
+export interface StaffWorkPattern {
+  basis: 'monthly' | 'weekly' | 'daily';
+  monthly: StaffWorkPatternMonthly | null;
+  weekly: StaffWorkPatternWeeklyByHours | null;
+  daily: StaffWorkPatternDaily | null;
+  effectiveWeeksPerMonth: number | null;
+  derivedMonthlyMinutes: number;
+  derivedWeeklyMinutes: number | null;
+}
+
 export interface OperationalConfig {
   mode: OperationalScheduleMode;
   simple: SimpleOperationalSchedule;
@@ -35,6 +76,7 @@ export interface StaffProfile {
   monthlySalary: number;
   workDaysPerMonth: number;
   workHoursPerDay: number;
+  workPattern?: StaffWorkPattern | null;
   notes?: string;
 }
 
@@ -46,8 +88,8 @@ export interface StaffAssignment {
 export interface MaterialItem {
   id: string;
   name: string;
-  unitLabel: string; // e.g. shot, cc, vial
-  unitQuantity: number; // quantity per base unit (e.g. 2400 shots)
+  unitLabel: string;
+  unitQuantity: number;
   unitPrice: number;
   notes?: string;
 }
@@ -61,7 +103,7 @@ export interface EquipmentProfile {
 
 export interface MaterialUsage {
   materialId: string;
-  quantity: number; // usage expressed in unitLabel
+  quantity: number;
 }
 
 export type FixedCostGroup = 'facility' | 'common' | 'marketing';
@@ -101,6 +143,7 @@ export interface StandaloneCostingState {
   equipment: EquipmentProfile[];
   useEquipmentHierarchy: boolean;
   staff: StaffProfile[];
+  phaseStatuses: Record<CostingPhaseId, CostingPhaseStatus>;
   materials: MaterialItem[];
   fixedCosts: FixedCostItem[];
   procedures: ProcedureFormValues[];

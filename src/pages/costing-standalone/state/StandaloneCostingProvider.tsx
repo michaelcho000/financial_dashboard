@@ -2,6 +2,8 @@
 import { buildAllBreakdowns } from '../../../services/standaloneCosting/calculations';
 import { clearDraft, loadDraft, saveDraft } from '../../../services/standaloneCosting/storage';
 import {
+  CostingPhaseId,
+  CostingPhaseStatus,
   EquipmentProfile,
   FixedCostGroup,
   FixedCostItem,
@@ -11,6 +13,7 @@ import {
   ProcedureFormValues,
   StandaloneCostingState,
   StaffProfile,
+  StaffWorkPattern,
   WeeklyOperationalSchedule,
   WeeklyScheduleEntry,
 } from '../../../services/standaloneCosting/types';
@@ -30,12 +33,26 @@ type StandaloneCostingAction =
   | { type: 'REMOVE_FIXED_COST'; payload: { id: string } }
   | { type: 'UPSERT_PROCEDURE'; payload: ProcedureFormValues }
   | { type: 'REMOVE_PROCEDURE'; payload: { id: string } }
-  | { type: 'SET_BREAKDOWNS' };
+  | { type: 'SET_BREAKDOWNS' }
+  | { type: 'MARK_PHASES_SAVED'; payload: { phases: Partial<Record<CostingPhaseId, CostingPhaseStatus>>; timestamp: string } };
 
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
+const MINUTES_IN_HOUR = 60;
+const DEFAULT_OPEN_START = '10:00';
+const DEFAULT_OPEN_END = '19:00';
 const DAY_SEQUENCE: WeeklyScheduleEntry['day'][] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const TIME_PATTERN = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
 const CALENDAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const COSTING_PHASES: CostingPhaseId[] = [
+  'operational',
+  'staff',
+  'materials',
+  'fixedCosts',
+  'procedures',
+  'catalog',
+  'results',
+  'marketing',
+];
 
 const sanitizeTime = (value: unknown, fallback: string): string => {
   if (typeof value !== 'string') {
@@ -76,6 +93,297 @@ const sanitizeCalendarMonth = (value: unknown): string | null => {
   return CALENDAR_MONTH_PATTERN.test(trimmed) ? trimmed : null;
 };
 
+const buildDefaultPhaseStatuses = (): Record<CostingPhaseId, CostingPhaseStatus> => {
+  return COSTING_PHASES.reduce((acc, phase) => {
+    acc[phase] = { lastSavedAt: null, checksum: null };
+    return acc;
+  }, {} as Record<CostingPhaseId, CostingPhaseStatus>);
+};
+
+const normalizePhaseStatuses = (
+  value: Partial<Record<CostingPhaseId, CostingPhaseStatus>> | undefined,
+): Record<CostingPhaseId, CostingPhaseStatus> => {
+  const base = buildDefaultPhaseStatuses();
+  if (!value || typeof value !== 'object') {
+    return base;
+  }
+  COSTING_PHASES.forEach(phase => {
+    const status = value[phase];
+    if (status && typeof status === 'object') {
+      base[phase] = {
+        lastSavedAt: typeof status.lastSavedAt === 'string' ? status.lastSavedAt : null,
+        checksum: typeof status.checksum === 'string' ? status.checksum : null,
+      };
+    }
+  });
+  return base;
+};
+
+const sanitizePositiveNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const sanitizeMonthlyPattern = (
+  input: Partial<StaffWorkPattern['monthly']> | null | undefined,
+): StaffWorkPattern['monthly'] => {
+  if (!input) {
+    return null;
+  }
+  const days = sanitizePositiveNumber((input as { workDaysPerMonth?: unknown }).workDaysPerMonth);
+  const hours = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!days || !hours) {
+    return null;
+  }
+  return {
+    workDaysPerMonth: days,
+    workHoursPerDay: hours,
+  };
+};
+
+const sanitizeWeeklyPattern = (
+  input: Partial<StaffWorkPattern['weekly']> | null | undefined,
+): StaffWorkPattern['weekly'] => {
+  if (!input) {
+    return null;
+  }
+  const daysPerWeek = sanitizePositiveNumber((input as { workDaysPerWeek?: unknown }).workDaysPerWeek);
+  const hoursPerWeek = sanitizePositiveNumber((input as { workHoursPerWeek?: unknown }).workHoursPerWeek);
+  const hoursPerDay = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!daysPerWeek && !hoursPerWeek && !hoursPerDay) {
+    return null;
+  }
+  return {
+    workDaysPerWeek: daysPerWeek ?? 0,
+    workHoursPerWeek: hoursPerWeek ?? null,
+    workHoursPerDay: hoursPerDay ?? null,
+  };
+};
+
+const sanitizeDailyPattern = (
+  input: Partial<StaffWorkPattern['daily']> | null | undefined,
+): StaffWorkPattern['daily'] => {
+  if (!input) {
+    return null;
+  }
+  const days = sanitizePositiveNumber((input as { workDaysPerWeek?: unknown }).workDaysPerWeek);
+  const hours = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!days || !hours) {
+    return null;
+  }
+  return {
+    workDaysPerWeek: days,
+    workHoursPerDay: hours,
+  };
+};
+
+const deriveMonthlyMinutesFromPattern = (
+  pattern: StaffWorkPattern,
+  fallbackEffectiveWeeks: number,
+): { monthlyMinutes: number; weeklyMinutes: number | null } => {
+  const effectiveWeeks =
+    typeof pattern.effectiveWeeksPerMonth === 'number' && Number.isFinite(pattern.effectiveWeeksPerMonth)
+      ? pattern.effectiveWeeksPerMonth
+      : fallbackEffectiveWeeks;
+
+  if (pattern.basis === 'monthly' && pattern.monthly) {
+    const monthlyMinutes =
+      pattern.monthly.workDaysPerMonth * pattern.monthly.workHoursPerDay * MINUTES_IN_HOUR;
+    const weeklyMinutes = effectiveWeeks > 0 ? monthlyMinutes / effectiveWeeks : null;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  if (pattern.basis === 'weekly' && pattern.weekly) {
+    const hoursPerWeek =
+      pattern.weekly.workHoursPerWeek ??
+      (pattern.weekly.workHoursPerDay ? pattern.weekly.workHoursPerDay * (pattern.weekly.workDaysPerWeek || 0) : null);
+    if (!hoursPerWeek) {
+      return { monthlyMinutes: 0, weeklyMinutes: null };
+    }
+    const weeklyMinutes = hoursPerWeek * MINUTES_IN_HOUR;
+    const monthlyMinutes = effectiveWeeks > 0 ? weeklyMinutes * effectiveWeeks : weeklyMinutes * fallbackEffectiveWeeks;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  if (pattern.basis === 'daily' && pattern.daily) {
+    const weeklyMinutes =
+      pattern.daily.workDaysPerWeek * pattern.daily.workHoursPerDay * MINUTES_IN_HOUR;
+    const monthlyMinutes = effectiveWeeks > 0 ? weeklyMinutes * effectiveWeeks : weeklyMinutes * fallbackEffectiveWeeks;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  return { monthlyMinutes: 0, weeklyMinutes: null };
+};
+
+const normalizeStaffWorkPattern = (
+  profile: StaffProfile,
+  fallbackEffectiveWeeks: number,
+): StaffWorkPattern => {
+  const legacyMonthly = sanitizeMonthlyPattern({
+    workDaysPerMonth: profile.workDaysPerMonth,
+    workHoursPerDay: profile.workHoursPerDay,
+  });
+
+  const rawPattern = profile.workPattern ?? null;
+  const monthly =
+    sanitizeMonthlyPattern(rawPattern?.monthly) ?? legacyMonthly;
+  const weekly = sanitizeWeeklyPattern(rawPattern?.weekly);
+  const daily = sanitizeDailyPattern(rawPattern?.daily);
+
+  let basis: StaffWorkPattern['basis'] = 'monthly';
+  if (rawPattern?.basis === 'weekly' && weekly) {
+    basis = 'weekly';
+  } else if (rawPattern?.basis === 'daily' && daily) {
+    basis = 'daily';
+  } else if (rawPattern?.basis === 'monthly' && monthly) {
+    basis = 'monthly';
+  } else if (!monthly && weekly) {
+    basis = 'weekly';
+  } else if (!monthly && !weekly && daily) {
+    basis = 'daily';
+  }
+
+  const effectiveWeeks =
+    sanitizePositiveNumber(rawPattern?.effectiveWeeksPerMonth) ?? fallbackEffectiveWeeks;
+
+  const tempPattern: StaffWorkPattern = {
+    basis,
+    monthly,
+    weekly,
+    daily,
+    effectiveWeeksPerMonth: effectiveWeeks,
+    derivedMonthlyMinutes: 0,
+    derivedWeeklyMinutes: null,
+  };
+
+  const derived = deriveMonthlyMinutesFromPattern(tempPattern, fallbackEffectiveWeeks);
+  tempPattern.derivedMonthlyMinutes = derived.monthlyMinutes;
+  tempPattern.derivedWeeklyMinutes = derived.weeklyMinutes;
+
+  return tempPattern;
+};
+
+const normalizeStaffProfile = (profile: StaffProfile): StaffProfile => {
+  const normalizedWorkDaysPerMonth =
+    typeof profile.workDaysPerMonth === 'number' && Number.isFinite(profile.workDaysPerMonth)
+      ? profile.workDaysPerMonth
+      : 0;
+  const normalizedWorkHoursPerDay =
+    typeof profile.workHoursPerDay === 'number' && Number.isFinite(profile.workHoursPerDay)
+      ? profile.workHoursPerDay
+      : 0;
+
+  const workPattern = normalizeStaffWorkPattern(
+    {
+      ...profile,
+      workDaysPerMonth: normalizedWorkDaysPerMonth,
+      workHoursPerDay: normalizedWorkHoursPerDay,
+    },
+    DEFAULT_WEEKS_PER_MONTH,
+  );
+
+  return {
+    ...profile,
+    workDaysPerMonth: normalizedWorkDaysPerMonth,
+    workHoursPerDay: normalizedWorkHoursPerDay,
+    workPattern,
+  };
+};
+
+const normalizeStaffList = (staff: StaffProfile[]): StaffProfile[] => staff.map(normalizeStaffProfile);
+
+const stableStringify = (value: unknown): string => {
+  const seen = new WeakSet<object>();
+  const normalize = (input: unknown): unknown => {
+    if (input === null || typeof input !== 'object') {
+      return input;
+    }
+    if (seen.has(input as object)) {
+      return null;
+    }
+    seen.add(input as object);
+    if (Array.isArray(input)) {
+      return input.map(item => normalize(item));
+    }
+    const result: Record<string, unknown> = {};
+    Object.keys(input as Record<string, unknown>)
+      .sort()
+      .forEach(key => {
+        result[key] = normalize((input as Record<string, unknown>)[key]);
+      });
+    return result;
+  };
+  return JSON.stringify(normalize(value));
+};
+
+const phaseSnapshotSelectors: Record<CostingPhaseId, (state: StandaloneCostingState) => unknown> = {
+  operational: state => ({
+    operational: state.operational,
+    equipment: state.equipment,
+    useEquipmentHierarchy: state.useEquipmentHierarchy,
+  }),
+  staff: state => state.staff,
+  materials: state => state.materials,
+  fixedCosts: state => state.fixedCosts,
+  procedures: state => state.procedures,
+  catalog: state => state.procedures,
+  results: state => ({
+    breakdowns: state.breakdowns,
+    procedures: state.procedures.map(item => ({ id: item.id, totalMinutes: item.totalMinutes })),
+  }),
+  marketing: state => ({
+    breakdowns: state.breakdowns,
+    procedures: state.procedures.map(item => ({ id: item.id, price: item.price })),
+  }),
+};
+
+const computePhaseChecksum = (state: StandaloneCostingState, phase: CostingPhaseId): string => {
+  const selector = phaseSnapshotSelectors[phase];
+  const snapshot = selector ? selector(state) : null;
+  return stableStringify(snapshot);
+};
+
+const PHASE_SAVE_PROPAGATION: Partial<Record<CostingPhaseId, CostingPhaseId[]>> = {
+  operational: ['results', 'marketing'],
+  staff: ['results', 'marketing'],
+  materials: ['results', 'marketing'],
+  fixedCosts: ['results', 'marketing'],
+  procedures: ['catalog', 'results', 'marketing'],
+};
+
+const seedPhaseChecksums = (
+  state: StandaloneCostingState,
+  timestamp: string | null = null,
+): StandaloneCostingState => {
+  const nextStatuses = { ...state.phaseStatuses };
+  let changed = false;
+  COSTING_PHASES.forEach(phase => {
+    const existing = nextStatuses[phase] ?? { lastSavedAt: null, checksum: null };
+    if (!existing.checksum) {
+      nextStatuses[phase] = {
+        lastSavedAt: existing.lastSavedAt ?? timestamp,
+        checksum: computePhaseChecksum(state, phase),
+      };
+      changed = true;
+    }
+  });
+  if (!changed) {
+    return state;
+  }
+  return {
+    ...state,
+    phaseStatuses: nextStatuses,
+  };
+};
+
 const normalizeOperationalMode = (mode: unknown): OperationalScheduleMode => {
   return mode === 'weekly' ? 'weekly' : 'simple';
 };
@@ -97,8 +405,8 @@ const normalizeWeeklySchedule = (schedule: Partial<WeeklyOperationalSchedule> | 
 
   const normalized: WeeklyScheduleEntry[] = DAY_SEQUENCE.map(day => {
     const existing = entriesByDay.get(day);
-    const startTime = sanitizeTime(existing?.startTime ?? null, '09:00');
-    const endTime = sanitizeTime(existing?.endTime ?? null, '18:00');
+    const startTime = sanitizeTime(existing?.startTime ?? null, DEFAULT_OPEN_START);
+    const endTime = sanitizeTime(existing?.endTime ?? null, DEFAULT_OPEN_END);
     const duration = toMinutes(endTime) - toMinutes(startTime);
     const isOpen = Boolean(existing?.isOpen && duration > 0);
     return {
@@ -154,17 +462,21 @@ const normalizeOperationalConfig = (
   };
 };
 
-const buildInitialState = (): StandaloneCostingState => ({
-  operational: normalizeOperationalConfig(undefined),
-  equipment: [],
-  useEquipmentHierarchy: false,
-  staff: [],
-  materials: [],
-  fixedCosts: [],
-  procedures: [],
-  breakdowns: [],
-  lastSavedAt: null,
-});
+const buildInitialState = (): StandaloneCostingState => {
+  const base: StandaloneCostingState = {
+    operational: normalizeOperationalConfig(undefined),
+    equipment: [],
+    useEquipmentHierarchy: false,
+    staff: [],
+    phaseStatuses: buildDefaultPhaseStatuses(),
+    materials: [],
+    fixedCosts: [],
+    procedures: [],
+    breakdowns: [],
+    lastSavedAt: null,
+  };
+  return seedPhaseChecksums(base);
+};
 
 const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category?: string }): FixedCostItem => {
   const normalizedGroup: FixedCostGroup =
@@ -187,10 +499,11 @@ const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category
 const normalizeFixedCosts = (items: FixedCostItem[]): FixedCostItem[] => items.map(normalizeFixedCost);
 
 const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true): StandaloneCostingState => {
+  const normalizedStaff = normalizeStaffList(state.staff);
   const normalizedFixedCosts = normalizeFixedCosts(state.fixedCosts);
   const normalizedOperational = normalizeOperationalConfig(state.operational);
   const breakdowns = buildAllBreakdowns(state.procedures, {
-    staff: state.staff,
+    staff: normalizedStaff,
     materials: state.materials,
     fixedCosts: normalizedFixedCosts,
     operational: normalizedOperational,
@@ -198,17 +511,29 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
 
   return {
     ...state,
+    staff: normalizedStaff,
     fixedCosts: normalizedFixedCosts,
     operational: normalizedOperational,
     breakdowns,
+    phaseStatuses: normalizePhaseStatuses(state.phaseStatuses),
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
   };
 };
 
 const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction): StandaloneCostingState => {
   switch (action.type) {
-    case 'LOAD_STATE':
-      return recalcBreakdowns({ ...buildInitialState(), ...action.payload }, false);
+    case 'LOAD_STATE': {
+      const seeded = recalcBreakdowns(
+        {
+          ...buildInitialState(),
+          ...action.payload,
+          phaseStatuses: normalizePhaseStatuses(action.payload.phaseStatuses),
+        },
+        false,
+      );
+      const timestamp = action.payload.lastSavedAt ?? seeded.lastSavedAt ?? null;
+      return seedPhaseChecksums(seeded, timestamp);
+    }
     case 'RESET':
       return buildInitialState();
     case 'SET_OPERATIONAL':
@@ -281,6 +606,22 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
     }
     case 'SET_BREAKDOWNS':
       return recalcBreakdowns(state);
+    case 'MARK_PHASES_SAVED': {
+      const nextStatuses = { ...state.phaseStatuses };
+      Object.entries(action.payload.phases).forEach(([phaseId, status]) => {
+        if (status) {
+          nextStatuses[phaseId as CostingPhaseId] = {
+            lastSavedAt: status.lastSavedAt ?? action.payload.timestamp,
+            checksum: status.checksum ?? null,
+          };
+        }
+      });
+      return {
+        ...state,
+        phaseStatuses: nextStatuses,
+        lastSavedAt: action.payload.timestamp,
+      };
+    }
     default:
       return state;
   }
@@ -289,6 +630,14 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
 interface ProcedureEditorController {
   isOpen: boolean;
   procedureId: string | null;
+}
+
+interface PhaseProgress {
+  id: CostingPhaseId;
+  lastSavedAt: string | null;
+  checksum: string | null;
+  currentChecksum: string;
+  isDirty: boolean;
 }
 
 interface StandaloneCostingContextValue {
@@ -310,6 +659,8 @@ interface StandaloneCostingContextValue {
   openProcedureEditor: (procedureId?: string | null) => void;
   closeProcedureEditor: () => void;
   procedureEditor: ProcedureEditorController;
+  phaseProgress: Record<CostingPhaseId, PhaseProgress>;
+  savePhase: (phaseId: CostingPhaseId) => Promise<void>;
 }
 
 const StandaloneCostingContext = createContext<StandaloneCostingContextValue | null>(null);
@@ -320,6 +671,7 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
   const migrationNoticeRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
   const [procedureEditor, setProcedureEditor] = useState<ProcedureEditorController>({ isOpen: false, procedureId: null });
+  const stateRef = useRef(state);
 
   useEffect(() => {
     if (hydratedRef.current) {
@@ -366,6 +718,26 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     persist().catch(error => {
       console.error('[StandaloneCosting] Failed to persist state', error);
     });
+  }, [state]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const phaseProgress = useMemo<Record<CostingPhaseId, PhaseProgress>>(() => {
+    const entries: Partial<Record<CostingPhaseId, PhaseProgress>> = {};
+    COSTING_PHASES.forEach(phase => {
+      const stored = state.phaseStatuses[phase] ?? { lastSavedAt: null, checksum: null };
+      const currentChecksum = computePhaseChecksum(state, phase);
+      entries[phase] = {
+        id: phase,
+        lastSavedAt: stored.lastSavedAt ?? null,
+        checksum: stored.checksum ?? null,
+        currentChecksum,
+        isDirty: (stored.checksum ?? null) !== currentChecksum,
+      };
+    });
+    return entries as Record<CostingPhaseId, PhaseProgress>;
   }, [state]);
 
   const setOperationalConfig = useCallback((payload: OperationalConfig) => {
@@ -434,6 +806,21 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     setProcedureEditor({ isOpen: false, procedureId: null });
   }, []);
 
+  const savePhase = useCallback(async (phaseId: CostingPhaseId) => {
+    const snapshot = stateRef.current;
+    const timestamp = new Date().toISOString();
+    const related = PHASE_SAVE_PROPAGATION[phaseId] ?? [];
+    const targets = new Set<CostingPhaseId>([phaseId, ...related]);
+    const phases: Partial<Record<CostingPhaseId, CostingPhaseStatus>> = {};
+    targets.forEach(id => {
+      phases[id] = {
+        lastSavedAt: timestamp,
+        checksum: computePhaseChecksum(snapshot, id),
+      };
+    });
+    dispatch({ type: 'MARK_PHASES_SAVED', payload: { phases, timestamp } });
+  }, []);
+
   const value = useMemo<StandaloneCostingContextValue>(() => ({
     state,
     setOperationalConfig,
@@ -453,6 +840,8 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     openProcedureEditor,
     closeProcedureEditor,
     procedureEditor,
+    phaseProgress,
+    savePhase,
   }), [
     state,
     setOperationalConfig,
@@ -472,6 +861,8 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     openProcedureEditor,
     closeProcedureEditor,
     procedureEditor,
+    phaseProgress,
+    savePhase,
   ]);
 
   return (

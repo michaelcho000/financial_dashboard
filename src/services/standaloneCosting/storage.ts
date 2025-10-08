@@ -1,16 +1,20 @@
 ﻿import axios from 'axios';
 import {
+  CostingPhaseId,
+  CostingPhaseStatus,
   FixedCostGroup,
   FixedCostItem,
   OperationalConfig,
   OperationalScheduleMode,
   StandaloneCostingState,
+  StaffProfile,
+  StaffWorkPattern,
   WeeklyOperationalSchedule,
   WeeklyScheduleEntry,
 } from './types';
 
 const API_PATH = '/api/standalone-costing';
-const CURRENT_VERSION = 6;
+const CURRENT_VERSION = 7;
 
 export interface LoadedDraftResult {
   state: StandaloneCostingState;
@@ -38,9 +42,22 @@ const normalizeFixedCost = (item: FixedCostItem & { costGroup?: string; category
 };
 
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
+const MINUTES_IN_HOUR = 60;
+const DEFAULT_OPEN_START = '10:00';
+const DEFAULT_OPEN_END = '19:00';
 const DAY_SEQUENCE: WeeklyScheduleEntry['day'][] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const TIME_PATTERN = /^([0-1]?\d|2[0-3]):([0-5]\d)$/;
 const CALENDAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const COSTING_PHASES: CostingPhaseId[] = [
+  'operational',
+  'staff',
+  'materials',
+  'fixedCosts',
+  'procedures',
+  'catalog',
+  'results',
+  'marketing',
+];
 
 const sanitizeTime = (value: unknown, fallback: string): string => {
   if (typeof value !== 'string') {
@@ -81,6 +98,32 @@ const sanitizeCalendarMonth = (value: unknown): string | null => {
   return CALENDAR_MONTH_PATTERN.test(trimmed) ? trimmed : null;
 };
 
+const buildDefaultPhaseStatuses = (): Record<CostingPhaseId, CostingPhaseStatus> => {
+  return COSTING_PHASES.reduce((acc, phase) => {
+    acc[phase] = { lastSavedAt: null, checksum: null };
+    return acc;
+  }, {} as Record<CostingPhaseId, CostingPhaseStatus>);
+};
+
+const normalizePhaseStatuses = (
+  value: Partial<Record<CostingPhaseId, CostingPhaseStatus>> | undefined,
+): Record<CostingPhaseId, CostingPhaseStatus> => {
+  const base = buildDefaultPhaseStatuses();
+  if (!value || typeof value !== 'object') {
+    return base;
+  }
+  COSTING_PHASES.forEach(phase => {
+    const status = value[phase];
+    if (status && typeof status === 'object') {
+      base[phase] = {
+        lastSavedAt: typeof status.lastSavedAt === 'string' ? status.lastSavedAt : null,
+        checksum: typeof status.checksum === 'string' ? status.checksum : null,
+      };
+    }
+  });
+  return base;
+};
+
 const normalizeOperationalMode = (mode: unknown): OperationalScheduleMode => (mode === 'weekly' ? 'weekly' : 'simple');
 
 const normalizeWeeklySchedule = (schedule: Partial<WeeklyOperationalSchedule> | undefined): WeeklyOperationalSchedule => {
@@ -100,8 +143,8 @@ const normalizeWeeklySchedule = (schedule: Partial<WeeklyOperationalSchedule> | 
 
   const normalized: WeeklyScheduleEntry[] = DAY_SEQUENCE.map(day => {
     const existing = entriesMap.get(day);
-    const startTime = sanitizeTime(existing?.startTime ?? null, '09:00');
-    const endTime = sanitizeTime(existing?.endTime ?? null, '18:00');
+    const startTime = sanitizeTime(existing?.startTime ?? null, DEFAULT_OPEN_START);
+    const endTime = sanitizeTime(existing?.endTime ?? null, DEFAULT_OPEN_END);
     const duration = toMinutes(endTime) - toMinutes(startTime);
     const isOpen = Boolean(existing?.isOpen && duration > 0);
     return {
@@ -157,11 +200,198 @@ const normalizeOperationalConfig = (
   };
 };
 
+const sanitizePositiveNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const sanitizeMonthlyPattern = (
+  input: Partial<StaffWorkPattern['monthly']> | null | undefined,
+): StaffWorkPattern['monthly'] => {
+  if (!input) {
+    return null;
+  }
+  const days = sanitizePositiveNumber((input as { workDaysPerMonth?: unknown }).workDaysPerMonth);
+  const hours = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!days || !hours) {
+    return null;
+  }
+  return {
+    workDaysPerMonth: days,
+    workHoursPerDay: hours,
+  };
+};
+
+const sanitizeWeeklyPattern = (
+  input: Partial<StaffWorkPattern['weekly']> | null | undefined,
+): StaffWorkPattern['weekly'] => {
+  if (!input) {
+    return null;
+  }
+  const daysPerWeek = sanitizePositiveNumber((input as { workDaysPerWeek?: unknown }).workDaysPerWeek);
+  const hoursPerWeek = sanitizePositiveNumber((input as { workHoursPerWeek?: unknown }).workHoursPerWeek);
+  const hoursPerDay = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!daysPerWeek && !hoursPerWeek && !hoursPerDay) {
+    return null;
+  }
+  return {
+    workDaysPerWeek: daysPerWeek ?? 0,
+    workHoursPerWeek: hoursPerWeek ?? null,
+    workHoursPerDay: hoursPerDay ?? null,
+  };
+};
+
+const sanitizeDailyPattern = (
+  input: Partial<StaffWorkPattern['daily']> | null | undefined,
+): StaffWorkPattern['daily'] => {
+  if (!input) {
+    return null;
+  }
+  const days = sanitizePositiveNumber((input as { workDaysPerWeek?: unknown }).workDaysPerWeek);
+  const hours = sanitizePositiveNumber((input as { workHoursPerDay?: unknown }).workHoursPerDay);
+  if (!days || !hours) {
+    return null;
+  }
+  return {
+    workDaysPerWeek: days,
+    workHoursPerDay: hours,
+  };
+};
+
+const deriveMonthlyMinutesFromPattern = (
+  pattern: StaffWorkPattern,
+  fallbackEffectiveWeeks: number,
+): { monthlyMinutes: number; weeklyMinutes: number | null } => {
+  const effectiveWeeks =
+    typeof pattern.effectiveWeeksPerMonth === 'number' && Number.isFinite(pattern.effectiveWeeksPerMonth)
+      ? pattern.effectiveWeeksPerMonth
+      : fallbackEffectiveWeeks;
+
+  if (pattern.basis === 'monthly' && pattern.monthly) {
+    const monthlyMinutes =
+      pattern.monthly.workDaysPerMonth * pattern.monthly.workHoursPerDay * MINUTES_IN_HOUR;
+    const weeklyMinutes = effectiveWeeks > 0 ? monthlyMinutes / effectiveWeeks : null;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  if (pattern.basis === 'weekly' && pattern.weekly) {
+    const hoursPerWeek =
+      pattern.weekly.workHoursPerWeek ??
+      (pattern.weekly.workHoursPerDay ? pattern.weekly.workHoursPerDay * (pattern.weekly.workDaysPerWeek || 0) : null);
+    if (!hoursPerWeek) {
+      return { monthlyMinutes: 0, weeklyMinutes: null };
+    }
+    const weeklyMinutes = hoursPerWeek * MINUTES_IN_HOUR;
+    const monthlyMinutes = effectiveWeeks > 0 ? weeklyMinutes * effectiveWeeks : weeklyMinutes * fallbackEffectiveWeeks;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  if (pattern.basis === 'daily' && pattern.daily) {
+    const weeklyMinutes =
+      pattern.daily.workDaysPerWeek * pattern.daily.workHoursPerDay * MINUTES_IN_HOUR;
+    const monthlyMinutes = effectiveWeeks > 0 ? weeklyMinutes * effectiveWeeks : weeklyMinutes * fallbackEffectiveWeeks;
+    return { monthlyMinutes, weeklyMinutes };
+  }
+
+  return { monthlyMinutes: 0, weeklyMinutes: null };
+};
+
+const normalizeStaffWorkPattern = (
+  profile: StaffProfile,
+  fallbackEffectiveWeeks: number,
+): StaffWorkPattern => {
+  const legacyMonthly = sanitizeMonthlyPattern({
+    workDaysPerMonth: profile.workDaysPerMonth,
+    workHoursPerDay: profile.workHoursPerDay,
+  });
+
+  const rawPattern = profile.workPattern ?? null;
+  const monthly =
+    sanitizeMonthlyPattern(rawPattern?.monthly) ?? legacyMonthly;
+  const weekly = sanitizeWeeklyPattern(rawPattern?.weekly);
+  const daily = sanitizeDailyPattern(rawPattern?.daily);
+
+  let basis: StaffWorkPattern['basis'] = 'monthly';
+  if (rawPattern?.basis === 'weekly' && weekly) {
+    basis = 'weekly';
+  } else if (rawPattern?.basis === 'daily' && daily) {
+    basis = 'daily';
+  } else if (rawPattern?.basis === 'monthly' && monthly) {
+    basis = 'monthly';
+  } else if (!monthly && weekly) {
+    basis = 'weekly';
+  } else if (!monthly && !weekly && daily) {
+    basis = 'daily';
+  }
+
+  const effectiveWeeks =
+    sanitizePositiveNumber(rawPattern?.effectiveWeeksPerMonth) ?? fallbackEffectiveWeeks;
+
+  const pattern: StaffWorkPattern = {
+    basis,
+    monthly,
+    weekly,
+    daily,
+    effectiveWeeksPerMonth: effectiveWeeks,
+    derivedMonthlyMinutes: 0,
+    derivedWeeklyMinutes: null,
+  };
+
+  const derived = deriveMonthlyMinutesFromPattern(pattern, fallbackEffectiveWeeks);
+  pattern.derivedMonthlyMinutes = derived.monthlyMinutes;
+  pattern.derivedWeeklyMinutes = derived.weeklyMinutes;
+
+  return pattern;
+};
+
+const normalizeStaffProfile = (profile: StaffProfile): StaffProfile => {
+  const normalizedWorkDaysPerMonth =
+    typeof profile.workDaysPerMonth === 'number' && Number.isFinite(profile.workDaysPerMonth)
+      ? profile.workDaysPerMonth
+      : 0;
+  const normalizedWorkHoursPerDay =
+    typeof profile.workHoursPerDay === 'number' && Number.isFinite(profile.workHoursPerDay)
+      ? profile.workHoursPerDay
+      : 0;
+
+  const workPattern = normalizeStaffWorkPattern(
+    {
+      ...profile,
+      workDaysPerMonth: normalizedWorkDaysPerMonth,
+      workHoursPerDay: normalizedWorkHoursPerDay,
+    },
+    DEFAULT_WEEKS_PER_MONTH,
+  );
+
+  return {
+    ...profile,
+    workDaysPerMonth: normalizedWorkDaysPerMonth,
+    workHoursPerDay: normalizedWorkHoursPerDay,
+    workPattern,
+  };
+};
+
+const normalizeStaffList = (staff: StaffProfile[] | undefined): StaffProfile[] => {
+  if (!Array.isArray(staff)) {
+    return [];
+  }
+  return staff.map(normalizeStaffProfile);
+};
+
 const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
   operational: normalizeOperationalConfig(state.operational),
   equipment: state.equipment ?? [],
   useEquipmentHierarchy: state.useEquipmentHierarchy ?? false,
-  staff: state.staff ?? [],
+  staff: normalizeStaffList(state.staff),
+  phaseStatuses: normalizePhaseStatuses(state.phaseStatuses),
   materials: state.materials ?? [],
   fixedCosts: state.fixedCosts ?? [],
   procedures: state.procedures ?? [],
@@ -174,6 +404,7 @@ const normalizeState = (state: PartialState): StandaloneCostingState => {
   return {
     ...ensured,
     fixedCosts: ensured.fixedCosts.map(normalizeFixedCost),
+    staff: normalizeStaffList(ensured.staff),
   };
 };
 

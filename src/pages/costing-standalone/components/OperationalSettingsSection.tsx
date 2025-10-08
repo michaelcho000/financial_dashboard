@@ -10,6 +10,7 @@ import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import Alert from './Alert';
 import HelpTooltip from './HelpTooltip';
 import Modal from '../../../components/common/Modal';
+import PhaseSaveControls from './PhaseSaveControls';
 
 interface WeeklyDayForm {
   day: DayOfWeek;
@@ -116,18 +117,11 @@ const deriveWeeklyScheduleEntries = (weeklyForm: WeeklyDayForm[]): WeeklySchedul
 const OperationalSettingsSection: React.FC = () => {
   const { state, setOperationalConfig } = useStandaloneCosting();
   const [form, setForm] = useState<FormState>(() => buildFormStateFromConfig(state.operational));
-  const [savedAt, setSavedAt] = useState<string | null>(state.lastSavedAt ?? null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     setForm(buildFormStateFromConfig(state.operational));
   }, [state.operational]);
-
-  useEffect(() => {
-    if (state.lastSavedAt) {
-      setSavedAt(state.lastSavedAt);
-    }
-  }, [state.lastSavedAt]);
 
   const capacityMinutes = useMemo(() => calculateOperationalMinutes(state.operational), [state.operational]);
 
@@ -238,7 +232,6 @@ const OperationalSettingsSection: React.FC = () => {
       notes: form.notes.trim() || undefined,
     });
 
-    setSavedAt(new Date().toISOString());
     setIsModalOpen(false);
   };
 
@@ -260,17 +253,14 @@ const OperationalSettingsSection: React.FC = () => {
           </button>
         </header>
 
+        <PhaseSaveControls phaseId="operational" className="mb-4" />
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-sm text-gray-500">운영 모드</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {form.mode === 'weekly' ? '요일별 스케줄' : '월별 총량'}
             </p>
-            {savedAt && (
-              <p className="mt-1 text-xs text-gray-500">
-                마지막 저장: {new Date(savedAt).toLocaleString('ko-KR')}
-              </p>
-            )}
           </div>
 
           <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">

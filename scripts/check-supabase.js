@@ -71,7 +71,27 @@ async function main() {
       }
     }
 
-    console.log('Supabase 연결이 정상입니다.');
+    const { error: baselineTableError } = await client
+      .from('month_baselines')
+      .select('id', { head: true, count: 'exact' })
+      .limit(1);
+
+    if (baselineTableError) {
+      console.error('month_baselines 테이블 확인 실패:', baselineTableError.message ?? baselineTableError);
+      process.exit(1);
+    }
+
+    const { error: procedureTableError } = await client
+      .from('procedure_definitions')
+      .select('id', { head: true, count: 'exact' })
+      .limit(1);
+
+    if (procedureTableError) {
+      console.error('procedure_definitions 테이블 확인 실패:', procedureTableError.message ?? procedureTableError);
+      process.exit(1);
+    }
+
+    console.log('Supabase 연결 및 코스트 관련 테이블이 정상입니다.');
   } catch (error) {
     console.error('Supabase 헬스체크 중 오류 발생:', error instanceof Error ? error.message : error);
     process.exit(1);
