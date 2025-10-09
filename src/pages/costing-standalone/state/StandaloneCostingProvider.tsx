@@ -166,6 +166,26 @@ const normalizeMarketingSettings = (
   };
 };
 
+const pruneManualMarketingAllocations = (
+  settings: MarketingSettings,
+  procedures: ProcedureFormValues[],
+): MarketingSettings => {
+  const validIds = new Set(procedures.map(procedure => procedure.id));
+  const entries = Object.entries(settings.manualMarketingAllocations ?? {});
+  const filtered = entries.filter(([procedureId]) => validIds.has(procedureId));
+  if (filtered.length === entries.length) {
+    return settings;
+  }
+  const nextAllocations = filtered.reduce<Record<string, number>>((acc, [procedureId, amount]) => {
+    acc[procedureId] = amount;
+    return acc;
+  }, {});
+  return {
+    ...settings,
+    manualMarketingAllocations: nextAllocations,
+  };
+};
+
 const sanitizePositiveNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
     return value;
@@ -557,6 +577,8 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
   const normalizedStaff = normalizeStaffList(state.staff);
   const normalizedFixedCosts = normalizeFixedCosts(state.fixedCosts);
   const normalizedOperational = normalizeOperationalConfig(state.operational);
+  const normalizedMarketingSettings = normalizeMarketingSettings(state.marketingSettings);
+  const cleanedMarketingSettings = pruneManualMarketingAllocations(normalizedMarketingSettings, state.procedures);
   const breakdowns = buildAllBreakdowns(state.procedures, {
     staff: normalizedStaff,
     materials: state.materials,
@@ -569,7 +591,7 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
     staff: normalizedStaff,
     fixedCosts: normalizedFixedCosts,
     operational: normalizedOperational,
-    marketingSettings: normalizeMarketingSettings(state.marketingSettings),
+    marketingSettings: cleanedMarketingSettings,
     breakdowns,
     phaseStatuses: normalizePhaseStatuses(state.phaseStatuses),
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
@@ -657,8 +679,31 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
       return recalcBreakdowns({ ...state, procedures: nextProcedures });
     }
     case 'REMOVE_PROCEDURE': {
-      const nextProcedures = state.procedures.filter(item => item.id !== action.payload.id);
-      return recalcBreakdowns({ ...state, procedures: nextProcedures });
+      const procedureId = action.payload.id;
+      const nextProcedures = state.procedures.filter(item => item.id !== procedureId);
+      if (nextProcedures.length === state.procedures.length) {
+        return state;
+      }
+
+      const nextActuals = state.procedureActuals.filter(item => item.procedureId !== procedureId);
+      const validProcedures = new Set(nextProcedures.map(item => item.id));
+      const manualMap = state.marketingSettings.manualMarketingAllocations ?? {};
+      const filteredManualAllocations = Object.entries(manualMap).reduce<Record<string, number>>((acc, [id, amount]) => {
+        if (validProcedures.has(id)) {
+          acc[id] = amount;
+        }
+        return acc;
+      }, {});
+
+      return recalcBreakdowns({
+        ...state,
+        procedures: nextProcedures,
+        procedureActuals: nextActuals,
+        marketingSettings: {
+          ...state.marketingSettings,
+          manualMarketingAllocations: filteredManualAllocations,
+        },
+      });
     }
     case 'UPSERT_PROCEDURE_ACTUAL': {
       const procedureId = action.payload.procedureId.trim();

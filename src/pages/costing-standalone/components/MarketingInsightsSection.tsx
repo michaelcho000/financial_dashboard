@@ -891,51 +891,66 @@ const MarketingInsightsSection: React.FC = () => {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-blue-100 bg-blue-50 p-5">
-          <h3 className="text-sm font-semibold text-blue-900">집중 투자 추천 시술</h3>
-          <p className="mt-1 text-xs text-blue-700">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900">집중 투자 추천 시술</h3>
+          <p className="mt-1 text-xs text-gray-600">
             마진율이 높고 추가 성장 여지가 있는 시술입니다. 마케팅 예산과 상담 리소스를 우선 배분하세요.
           </p>
-          <ul className="mt-3 space-y-2 text-sm text-blue-900">
+          <ul className="mt-3 space-y-2 text-sm text-gray-900">
             {insights.summary.growthCandidates.length === 0 && (
-              <li className="rounded-md bg-white/50 p-3 text-blue-600">추천할 시술이 없습니다.</li>
+              <li className="rounded-md border border-dashed border-blue-200 p-3 text-blue-600">
+                추천할 시술이 없습니다.
+              </li>
             )}
             {insights.summary.growthCandidates.map(candidate => (
-              <li key={candidate.id} className="rounded-md bg-white/70 p-3 shadow-sm">
+              <li key={candidate.id} className="rounded-md border border-blue-100 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold">{candidate.name}</span>
-                  <span className="text-xs text-blue-600">
+                  <span className="font-semibold text-gray-900">{candidate.name}</span>
+                  <span className="text-xs font-medium text-blue-600">
                     마진율 {formatPercentage(candidate.marginRate)}
                   </span>
                 </div>
-                <div className="mt-1 text-xs text-blue-700">
-                  손익분기까지 {candidate.breakevenGap != null ? `${formatCount(candidate.breakevenGap)}건 남음` : '데이터 부족'}
-                  · 현 실행 {formatCount(candidate.performed)}건 · 단위 마진 {formatKrw(candidate.unitMargin)}
+                <div className="mt-1 text-xs text-gray-600">
+                  손익분기까지{' '}
+                  <span className="font-medium text-blue-600">
+                    {candidate.breakevenGap != null ? `${formatCount(candidate.breakevenGap)}건 남음` : '데이터 부족'}
+                  </span>
+                  · 현 실행{' '}
+                  <span className="font-medium text-blue-600">{formatCount(candidate.performed)}건</span>
+                  · 단위 마진{' '}
+                  <span className="font-medium text-blue-600">{formatKrw(candidate.unitMargin)}</span>
                 </div>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-lg border border-rose-100 bg-rose-50 p-5">
-          <h3 className="text-sm font-semibold text-rose-900">축소 검토 시술</h3>
-          <p className="mt-1 text-xs text-rose-700">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900">축소 검토 시술</h3>
+          <p className="mt-1 text-xs text-gray-600">
             마진율이 낮고 수요가 약한 시술입니다. 프로모션 조정이나 리포지셔닝을 검토하세요.
           </p>
-          <ul className="mt-3 space-y-2 text-sm text-rose-900">
+          <ul className="mt-3 space-y-2 text-sm text-gray-900">
             {insights.summary.pruneCandidates.length === 0 && (
-              <li className="rounded-md bg-white/50 p-3 text-rose-600">축소를 권장할 시술이 없습니다.</li>
+              <li className="rounded-md border border-dashed border-rose-200 p-3 text-rose-600">
+                축소를 권장할 시술이 없습니다.
+              </li>
             )}
             {insights.summary.pruneCandidates.map(candidate => (
-              <li key={candidate.id} className="rounded-md bg-white/70 p-3 shadow-sm">
+              <li key={candidate.id} className="rounded-md border border-rose-100 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold">{candidate.name}</span>
-                  <span className="text-xs text-rose-600">
+                  <span className="font-semibold text-gray-900">{candidate.name}</span>
+                  <span className="text-xs font-medium text-rose-600">
                     마진율 {formatPercentage(candidate.marginRate)}
                   </span>
                 </div>
-                <div className="mt-1 text-xs text-rose-700">
-                  월 실적 {formatCount(candidate.performed)}건 · 단위 마진 {formatKrw(candidate.unitMargin)} · 카테고리 {candidate.category}
+                <div className="mt-1 text-xs text-gray-600">
+                  월 실적{' '}
+                  <span className="font-medium text-rose-600">{formatCount(candidate.performed)}건</span>
+                  · 단위 마진{' '}
+                  <span className="font-medium text-rose-600">{formatKrw(candidate.unitMargin)}</span>
+                  · 카테고리{' '}
+                  <span className="font-medium text-rose-600">{candidate.category}</span>
                 </div>
               </li>
             ))}
@@ -989,7 +1004,7 @@ const MarketingInsightsSection: React.FC = () => {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-2 text-sm text-gray-700">
-          <span className="font-semibold text-gray-900">월 매출 목표 (원)</span>
+          <span className="flex min-h-[32px] items-center font-semibold text-gray-900">월 매출 목표 (원)</span>
           <input
             type="text"
             inputMode="numeric"
@@ -1000,7 +1015,7 @@ const MarketingInsightsSection: React.FC = () => {
           />
         </label>
         <label className="flex flex-col gap-2 text-sm text-gray-700">
-          <span className="flex items-center gap-2 font-semibold text-gray-900">
+          <span className="flex min-h-[32px] items-center gap-2 font-semibold text-gray-900">
             월 마케팅 예산 (원)
             <button
               type="button"
@@ -1559,7 +1574,7 @@ const MarketingInsightsSection: React.FC = () => {
                 <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">실적 매출</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">실적 마진</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">ROAS</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">액션</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">액션</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1607,12 +1622,12 @@ const MarketingInsightsSection: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-right text-gray-700">{formatKrw(procedure.revenue)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{formatKrw(procedure.profit)}</td>
+                    <td className="px-4 py-2 text-right text-blue-600">{formatKrw(procedure.profit)}</td>
                     <td className="px-4 py-2 text-right text-gray-700">
                       {roas != null ? `${formatCount(roas, 2)}배` : '-'}
                     </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-4 py-2 text-center">
+                      <div className="flex items-center justify-center gap-2">
                         <label className="inline-flex items-center gap-1 text-xs text-gray-600">
                           <input
                             type="checkbox"
