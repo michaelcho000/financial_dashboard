@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { useMarketingInsights } from '../hooks/useMarketingInsights';
 import { formatKrw, formatPercentage } from '../../../utils/formatters';
@@ -19,6 +19,25 @@ const formatCount = (value: number, fractions = 0) =>
   Number(value).toLocaleString('ko-KR', { maximumFractionDigits: fractions, minimumFractionDigits: fractions });
 
 const clampNonNegative = (value: number) => (Number.isFinite(value) && value >= 0 ? value : 0);
+
+const parsePerformedInput = (value?: string): number => {
+  if (!value) {
+    return 0;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return 0;
+  }
+  return numeric;
+};
+
+interface MarketingValueSnapshot {
+  editorPerformed: string;
+  editorMarketing: string;
+  hadActual: boolean;
+  actualPerformed: number;
+  actualMarketing: number | null;
+}
 
 const parseCurrencyInput = (value: string): number => {
   if (!value) {
@@ -144,6 +163,8 @@ const MarketingInsightsSection: React.FC = () => {
   const [editorValues, setEditorValues] = useState<Record<string, { performed: string; marketingSpend: string }>>(
     initialEditorValues,
   );
+  const [isUniformMarketing, setIsUniformMarketing] = useState<boolean>(false);
+  const previousMarketingSnapshotRef = useRef<Record<string, MarketingValueSnapshot> | null>(null);
 
   const [bundlePrimary, setBundlePrimary] = useState<string>(() => state.procedures[0]?.id ?? '');
   const [bundleSecondary, setBundleSecondary] = useState<string>(() => state.procedures[1]?.id ?? '');
@@ -380,6 +401,140 @@ const MarketingInsightsSection: React.FC = () => {
       };
     });
   };
+
+  const applyUniformMarketing = useCallback((): boolean => {
+    if (operationalMarketingBudget <= 0 || state.procedures.length === 0) {
+      return false;
+    }
+
+    const baseShare = Math.floor(operationalMarketingBudget / state.procedures.length);
+    let remainder = operationalMarketingBudget - baseShare * state.procedures.length;
+
+    const snapshot: Record<string, MarketingValueSnapshot> = {};
+    const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
+
+    setEditorValues(prev => {
+      const next = { ...prev };
+      state.procedures.forEach(procedure => {
+        const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
+        const previousEditor = prev[procedure.id] ?? {
+          performed: existing && existing.performed > 0 ? String(existing.performed) : '',
+          marketingSpend:
+            existing && existing.marketingSpend != null
+              ? existing.marketingSpend === 0
+                ? '0'
+                : existing.marketingSpend.toLocaleString('ko-KR')
+              : '',
+        };
+
+        snapshot[procedure.id] = {
+          editorPerformed: previousEditor.performed,
+          editorMarketing: previousEditor.marketingSpend,
+          hadActual: Boolean(existing),
+          actualPerformed: existing?.performed ?? 0,
+          actualMarketing: existing?.marketingSpend ?? null,
+        };
+
+        let allocation = baseShare;
+        if (remainder > 0) {
+          allocation += 1;
+          remainder -= 1;
+        }
+
+        next[procedure.id] = {
+          performed: previousEditor.performed,
+          marketingSpend: allocation > 0 ? allocation.toLocaleString('ko-KR') : '0',
+        };
+
+        const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
+        updates.push({
+          procedureId: procedure.id,
+          performed: performedNumeric,
+          marketingSpend: allocation,
+        });
+      });
+      return next;
+    });
+
+    previousMarketingSnapshotRef.current = snapshot;
+    updates.forEach(entry => {
+      upsertProcedureActual({
+        procedureId: entry.procedureId,
+        performed: entry.performed,
+        marketingSpend: entry.marketingSpend,
+      });
+    });
+    return true;
+  }, [operationalMarketingBudget, state.procedures, state.procedureActuals, upsertProcedureActual]);
+
+  const revertUniformMarketing = useCallback(() => {
+    const snapshot = previousMarketingSnapshotRef.current;
+    if (!snapshot) {
+      return;
+    }
+    previousMarketingSnapshotRef.current = null;
+
+    const restores: Array<{ procedureId: string; performed: number; marketingSpend: number | null }> = [];
+    const removals: string[] = [];
+
+    setEditorValues(prev => {
+      const next = { ...prev };
+      state.procedures.forEach(procedure => {
+        const saved = snapshot[procedure.id];
+        if (!saved) {
+          return;
+        }
+        next[procedure.id] = {
+          performed: saved.editorPerformed,
+          marketingSpend: saved.editorMarketing,
+        };
+        if (saved.hadActual) {
+          restores.push({
+            procedureId: procedure.id,
+            performed: saved.actualPerformed,
+            marketingSpend: saved.actualMarketing ?? null,
+          });
+        } else {
+          removals.push(procedure.id);
+        }
+      });
+      return next;
+    });
+
+    restores.forEach(entry => {
+      upsertProcedureActual({
+        procedureId: entry.procedureId,
+        performed: entry.performed,
+        marketingSpend: entry.marketingSpend ?? null,
+      });
+    });
+    removals.forEach(id => removeProcedureActual(id));
+  }, [removeProcedureActual, state.procedures, upsertProcedureActual]);
+
+  const handleUniformMarketingToggle = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const checked = event.target.checked;
+      if (checked) {
+        const applied = applyUniformMarketing();
+        if (applied) {
+          setIsUniformMarketing(true);
+        } else {
+          setIsUniformMarketing(false);
+        }
+      } else {
+        revertUniformMarketing();
+        setIsUniformMarketing(false);
+      }
+    },
+    [applyUniformMarketing, revertUniformMarketing],
+  );
+
+  useEffect(() => {
+    if (isUniformMarketing && (operationalMarketingBudget <= 0 || state.procedures.length === 0)) {
+      revertUniformMarketing();
+      setIsUniformMarketing(false);
+    }
+  }, [isUniformMarketing, operationalMarketingBudget, state.procedures.length, revertUniformMarketing]);
 
   const handleEditorBlur = (procedureId: string) => {
     const current = editorValues[procedureId];
@@ -1110,6 +1265,28 @@ const MarketingInsightsSection: React.FC = () => {
           <p className="mt-1 text-xs text-gray-500">
             이번 달 실제 시술 건수와 마케팅비를 입력하세요. 저장하면 마케팅 인사이트에 바로 반영됩니다.
           </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-xs text-gray-500">
+              운영 세팅 마케팅비:{' '}
+              {operationalMarketingBudget > 0 ? formatKrw(operationalMarketingBudget) : '등록된 값이 없습니다.'}
+            </span>
+            <label
+              className={`flex items-center gap-2 rounded-md border px-3 py-1 text-xs ${
+                operationalMarketingBudget <= 0 || state.procedures.length === 0
+                  ? 'cursor-not-allowed border-gray-200 text-gray-400'
+                  : 'border-blue-200 text-blue-600'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={isUniformMarketing}
+                onChange={handleUniformMarketingToggle}
+                disabled={operationalMarketingBudget <= 0 || state.procedures.length === 0}
+              />
+              <span>마케팅비 균일 배분</span>
+            </label>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
