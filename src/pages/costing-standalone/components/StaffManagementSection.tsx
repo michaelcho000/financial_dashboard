@@ -461,7 +461,7 @@ const StaffManagementSection: React.FC = () => {
                     <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.monthlySalary)}</td>
                     <td className="px-4 py-2 text-gray-600">{item.patternSummary}</td>
                     <td className="px-4 py-2 text-right text-gray-600">
-                      {item.monthlyMinutes > 0 ? `${item.monthlyMinutes.toLocaleString('ko-KR')}분` : '-'}
+                      {item.monthlyMinutes > 0 ? `${Math.round(item.monthlyMinutes).toLocaleString('ko-KR')}분` : '-'}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-900">{formatKrw(item.minuteRate)}</td>
                     <td className="px-4 py-2 text-gray-600">{item.notes || '-'}</td>
