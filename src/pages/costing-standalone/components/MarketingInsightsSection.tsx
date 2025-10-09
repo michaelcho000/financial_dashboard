@@ -1271,20 +1271,21 @@ const MarketingInsightsSection: React.FC = () => {
               {operationalMarketingBudget > 0 ? formatKrw(operationalMarketingBudget) : '등록된 값이 없습니다.'}
             </span>
             <label
-              className={`flex items-center gap-2 rounded-md border px-3 py-1 text-xs ${
+              className={`relative inline-flex items-center ${
                 operationalMarketingBudget <= 0 || state.procedures.length === 0
-                  ? 'cursor-not-allowed border-gray-200 text-gray-400'
-                  : 'border-blue-200 text-blue-600'
+                  ? 'cursor-not-allowed opacity-60'
+                  : 'cursor-pointer'
               }`}
             >
               <input
                 type="checkbox"
-                className="h-4 w-4"
+                className="peer sr-only"
                 checked={isUniformMarketing}
                 onChange={handleUniformMarketingToggle}
                 disabled={operationalMarketingBudget <= 0 || state.procedures.length === 0}
               />
-              <span>마케팅비 균일 배분</span>
+              <span className="relative h-6 w-11 rounded-full bg-gray-200 transition-all peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:bg-blue-600 peer-disabled:bg-gray-200 peer-checked:after:translate-x-full peer-checked:after:border-blue-600 after:absolute after:top-[2px] after:start-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-disabled:after:bg-gray-100" />
+              <span className="ms-3 text-sm font-medium text-gray-700">마케팅비 균일 배분</span>
             </label>
           </div>
         </div>
