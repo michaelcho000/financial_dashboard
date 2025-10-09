@@ -5,8 +5,10 @@ import {
   CostingPhaseStatus,
   FixedCostGroup,
   FixedCostItem,
+  MarketingSettings,
   OperationalConfig,
   OperationalScheduleMode,
+  ProcedureActualPerformance,
   StandaloneCostingState,
   StaffProfile,
   StaffWorkPattern,
@@ -23,7 +25,7 @@ export interface LoadedDraftResult {
 type PartialState = Partial<StandaloneCostingState>;
 
 const API_PATH = '/api/standalone-costing';
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 9;
 const SUPABASE_TABLE = 'standalone_costing_state';
 const SUPABASE_ROW_ID = 'standalone-costing-primary';
 
@@ -321,6 +323,35 @@ const sanitizePositiveNumber = (value: unknown): number | null => {
   return null;
 };
 
+const sanitizeNonNegativeNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  if (value === '' || value === null || typeof value === 'undefined') {
+    return 0;
+  }
+  return null;
+};
+
+const sanitizeOptionalNonNegativeNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
 const sanitizeMonthlyPattern = (
   input: Partial<StaffWorkPattern['monthly']> | null | undefined,
 ): StaffWorkPattern['monthly'] => {
@@ -494,6 +525,47 @@ const normalizeStaffList = (staff: StaffProfile[] | undefined): StaffProfile[] =
   return staff.map(normalizeStaffProfile);
 };
 
+const normalizeMarketingSettings = (
+  value: Partial<MarketingSettings> | undefined,
+): MarketingSettings => {
+  const targetRevenue = sanitizeOptionalNonNegativeNumber(value?.targetRevenue);
+  const manualMarketingBudget = sanitizeOptionalNonNegativeNumber(value?.manualMarketingBudget);
+  return {
+    targetRevenue,
+    manualMarketingBudget,
+  };
+};
+
+const normalizeProcedureActuals = (
+  items: Partial<ProcedureActualPerformance>[] | undefined,
+): ProcedureActualPerformance[] => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const normalized: ProcedureActualPerformance[] = [];
+  items.forEach(item => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+    const procedureId =
+      typeof item.procedureId === 'string' && item.procedureId.trim().length > 0 ? item.procedureId.trim() : null;
+    if (!procedureId || seen.has(procedureId)) {
+      return;
+    }
+    const performed = sanitizeNonNegativeNumber((item as { performed?: unknown }).performed);
+    const marketingSpend = sanitizeNonNegativeNumber((item as { marketingSpend?: unknown }).marketingSpend);
+    normalized.push({
+      procedureId,
+      performed: performed ?? 0,
+      marketingSpend: marketingSpend ?? null,
+      notes: typeof item.notes === 'string' && item.notes.trim() ? item.notes.trim() : undefined,
+    });
+    seen.add(procedureId);
+  });
+  return normalized;
+};
+
 const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
   operational: normalizeOperationalConfig(state.operational),
   equipment: state.equipment ?? [],
@@ -504,6 +576,8 @@ const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
   fixedCosts: state.fixedCosts ?? [],
   procedures: state.procedures ?? [],
   breakdowns: state.breakdowns ?? [],
+  procedureActuals: normalizeProcedureActuals(state.procedureActuals as Partial<ProcedureActualPerformance>[] | undefined),
+  marketingSettings: normalizeMarketingSettings(state.marketingSettings as Partial<MarketingSettings> | undefined),
   lastSavedAt: state.lastSavedAt ?? null,
 });
 
@@ -531,6 +605,22 @@ const migrateState = (state: PartialState, version: number): StandaloneCostingSt
         ...(item as FixedCostItem),
         costGroup: (item as FixedCostItem)?.costGroup === 'common' ? 'common' : 'facility',
       })),
+    };
+  }
+
+  if (version < 8) {
+    next = {
+      ...next,
+      procedureActuals: normalizeProcedureActuals(
+        (next.procedureActuals as Partial<ProcedureActualPerformance>[] | undefined) ?? [],
+      ),
+    };
+  }
+
+  if (version < 9) {
+    next = {
+      ...next,
+      marketingSettings: normalizeMarketingSettings(next.marketingSettings as Partial<MarketingSettings> | undefined),
     };
   }
 

@@ -138,6 +138,18 @@ export interface ProcedureCostBreakdown {
   breakevenUnits: number | null;
 }
 
+export interface ProcedureActualPerformance {
+  procedureId: string;
+  performed: number;
+  marketingSpend?: number | null;
+  notes?: string;
+}
+
+export interface MarketingSettings {
+  targetRevenue: number | null;
+  manualMarketingBudget: number | null;
+}
+
 export interface StandaloneCostingState {
   operational: OperationalConfig;
   equipment: EquipmentProfile[];
@@ -148,6 +160,8 @@ export interface StandaloneCostingState {
   fixedCosts: FixedCostItem[];
   procedures: ProcedureFormValues[];
   breakdowns: ProcedureCostBreakdown[];
+  procedureActuals: ProcedureActualPerformance[];
+  marketingSettings: MarketingSettings;
   lastSavedAt: string | null;
 }
 

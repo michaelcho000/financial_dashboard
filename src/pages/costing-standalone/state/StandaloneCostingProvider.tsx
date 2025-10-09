@@ -10,7 +10,9 @@ import {
   MaterialItem,
   OperationalConfig,
   OperationalScheduleMode,
+  ProcedureActualPerformance,
   ProcedureFormValues,
+  MarketingSettings,
   StandaloneCostingState,
   StaffProfile,
   StaffWorkPattern,
@@ -34,6 +36,9 @@ type StandaloneCostingAction =
   | { type: 'UPSERT_PROCEDURE'; payload: ProcedureFormValues }
   | { type: 'REMOVE_PROCEDURE'; payload: { id: string } }
   | { type: 'SET_BREAKDOWNS' }
+  | { type: 'UPSERT_PROCEDURE_ACTUAL'; payload: ProcedureActualPerformance }
+  | { type: 'REMOVE_PROCEDURE_ACTUAL'; payload: { procedureId: string } }
+  | { type: 'SET_MARKETING_SETTINGS'; payload: Partial<MarketingSettings> }
   | { type: 'MARK_PHASES_SAVED'; payload: { phases: Partial<Record<CostingPhaseId, CostingPhaseStatus>>; timestamp: string } };
 
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
@@ -117,6 +122,28 @@ const normalizePhaseStatuses = (
     }
   });
   return base;
+};
+
+const sanitizeOptionalNonNegative = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const normalizeMarketingSettings = (
+  settings: Partial<MarketingSettings> | undefined,
+): MarketingSettings => {
+  return {
+    targetRevenue: sanitizeOptionalNonNegative(settings?.targetRevenue),
+    manualMarketingBudget: sanitizeOptionalNonNegative(settings?.manualMarketingBudget),
+  };
 };
 
 const sanitizePositiveNumber = (value: unknown): number | null => {
@@ -342,6 +369,8 @@ const phaseSnapshotSelectors: Record<CostingPhaseId, (state: StandaloneCostingSt
   marketing: state => ({
     breakdowns: state.breakdowns,
     procedures: state.procedures.map(item => ({ id: item.id, price: item.price })),
+    marketingSettings: state.marketingSettings,
+    procedureActuals: state.procedureActuals,
   }),
 };
 
@@ -469,12 +498,17 @@ const buildInitialState = (): StandaloneCostingState => {
     useEquipmentHierarchy: false,
     staff: [],
     phaseStatuses: buildDefaultPhaseStatuses(),
-    materials: [],
-    fixedCosts: [],
-    procedures: [],
-    breakdowns: [],
-    lastSavedAt: null,
-  };
+  materials: [],
+  fixedCosts: [],
+  procedures: [],
+  breakdowns: [],
+  marketingSettings: {
+    targetRevenue: null,
+    manualMarketingBudget: null,
+  },
+  procedureActuals: [],
+  lastSavedAt: null,
+};
   return seedPhaseChecksums(base);
 };
 
@@ -514,6 +548,7 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
     staff: normalizedStaff,
     fixedCosts: normalizedFixedCosts,
     operational: normalizedOperational,
+    marketingSettings: normalizeMarketingSettings(state.marketingSettings),
     breakdowns,
     phaseStatuses: normalizePhaseStatuses(state.phaseStatuses),
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
@@ -604,6 +639,55 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
       const nextProcedures = state.procedures.filter(item => item.id !== action.payload.id);
       return recalcBreakdowns({ ...state, procedures: nextProcedures });
     }
+    case 'UPSERT_PROCEDURE_ACTUAL': {
+      const procedureId = action.payload.procedureId.trim();
+      if (!procedureId) {
+        return state;
+      }
+      const performedValue = Number(action.payload.performed);
+      const performed = Number.isFinite(performedValue) && performedValue >= 0 ? performedValue : 0;
+      const marketingValue =
+        typeof action.payload.marketingSpend === 'number' ? action.payload.marketingSpend : action.payload.marketingSpend ?? null;
+      const marketingSpend =
+        typeof marketingValue === 'number' && Number.isFinite(marketingValue) && marketingValue >= 0 ? marketingValue : null;
+      const normalized: ProcedureActualPerformance = {
+        procedureId,
+        performed,
+        marketingSpend,
+        notes: action.payload.notes && action.payload.notes.trim() ? action.payload.notes.trim() : undefined,
+      };
+      const exists = state.procedureActuals.some(item => item.procedureId === procedureId);
+      const nextActuals = exists
+        ? state.procedureActuals.map(item => (item.procedureId === procedureId ? normalized : item))
+        : [...state.procedureActuals, normalized];
+      return {
+        ...state,
+        procedureActuals: nextActuals,
+        lastSavedAt: new Date().toISOString(),
+      };
+    }
+    case 'REMOVE_PROCEDURE_ACTUAL': {
+      const nextActuals = state.procedureActuals.filter(item => item.procedureId !== action.payload.procedureId);
+      if (nextActuals.length === state.procedureActuals.length) {
+        return state;
+      }
+      return {
+        ...state,
+        procedureActuals: nextActuals,
+        lastSavedAt: new Date().toISOString(),
+      };
+    }
+    case 'SET_MARKETING_SETTINGS': {
+      const nextSettings = normalizeMarketingSettings({
+        ...state.marketingSettings,
+        ...action.payload,
+      });
+      return {
+        ...state,
+        marketingSettings: nextSettings,
+        lastSavedAt: new Date().toISOString(),
+      };
+    }
     case 'SET_BREAKDOWNS':
       return recalcBreakdowns(state);
     case 'MARK_PHASES_SAVED': {
@@ -654,6 +738,9 @@ interface StandaloneCostingContextValue {
   removeFixedCost: (id: string) => void;
   upsertProcedure: (payload: ProcedureFormValues) => void;
   removeProcedure: (id: string) => void;
+  upsertProcedureActual: (payload: ProcedureActualPerformance) => void;
+  removeProcedureActual: (procedureId: string) => void;
+  setMarketingSettings: (payload: Partial<MarketingSettings>) => void;
   resetAll: () => void;
   hydrated: boolean;
   openProcedureEditor: (procedureId?: string | null) => void;
@@ -788,6 +875,18 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     dispatch({ type: 'REMOVE_PROCEDURE', payload: { id } });
   }, []);
 
+  const upsertProcedureActual = useCallback((payload: ProcedureActualPerformance) => {
+    dispatch({ type: 'UPSERT_PROCEDURE_ACTUAL', payload });
+  }, []);
+
+  const removeProcedureActual = useCallback((procedureId: string) => {
+    dispatch({ type: 'REMOVE_PROCEDURE_ACTUAL', payload: { procedureId } });
+  }, []);
+
+  const setMarketingSettings = useCallback((payload: Partial<MarketingSettings>) => {
+    dispatch({ type: 'SET_MARKETING_SETTINGS', payload });
+  }, []);
+
   const resetAll = useCallback(() => {
     const reset = async () => {
       await clearDraft();
@@ -835,6 +934,9 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     removeFixedCost,
     upsertProcedure,
     removeProcedure,
+    upsertProcedureActual,
+    removeProcedureActual,
+    setMarketingSettings,
     resetAll,
     hydrated,
     openProcedureEditor,
@@ -856,6 +958,9 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     removeFixedCost,
     upsertProcedure,
     removeProcedure,
+    upsertProcedureActual,
+    removeProcedureActual,
+    setMarketingSettings,
     resetAll,
     hydrated,
     openProcedureEditor,
