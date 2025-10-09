@@ -106,6 +106,12 @@ const MarketingInsightsSection: React.FC = () => {
     return 0;
   }, [manualMarketingBudget, operationalMarketingBudget, insights.summary.totalMarketingSpend]);
 
+  const manualAllocationMap = state.marketingSettings?.manualMarketingAllocations ?? {};
+  const distributionBudget = useMemo(
+    () => (operationalMarketingBudget > 0 ? operationalMarketingBudget : computedMarketingBudget),
+    [operationalMarketingBudget, computedMarketingBudget],
+  );
+
   const [marketingBudget, setMarketingBudget] = useState<number>(computedMarketingBudget);
   const [marketingBudgetInput, setMarketingBudgetInput] = useState<string>(() => formatCurrencyValue(computedMarketingBudget));
   const hasManualTargetRevenue = manualTargetRevenue != null;
@@ -162,6 +168,54 @@ const MarketingInsightsSection: React.FC = () => {
     initialEditorValues,
   );
   const [isUniformMarketing, setIsUniformMarketing] = useState<boolean>(false);
+
+  const manualAllocationSum = useMemo(
+    () =>
+      Object.values(manualAllocationMap).reduce(
+        (acc, value) => acc + (Number.isFinite(value) ? Number(value) : 0),
+        0,
+      ),
+    [manualAllocationMap],
+  );
+
+  const autoTargetProcedures = useMemo(
+    () => state.procedures.filter(procedure => manualAllocationMap[procedure.id] === undefined),
+    [state.procedures, manualAllocationMap],
+  );
+
+  const autoAllocationSum = useMemo(() => {
+    let total = 0;
+    state.procedures.forEach(procedure => {
+      if (manualAllocationMap[procedure.id] !== undefined) {
+        return;
+      }
+      const editorValue = editorValues[procedure.id]?.marketingSpend ?? '';
+      total += parseCurrencyInput(editorValue);
+    });
+    return total;
+  }, [editorValues, manualAllocationMap, state.procedures]);
+
+  const totalAllocated = manualAllocationSum + autoAllocationSum;
+  const remainingBudget = distributionBudget - totalAllocated;
+
+  const remainingSummary = useMemo(() => {
+    if (remainingBudget === 0) {
+      return {
+        label: '예산과 일치',
+        className: 'border-green-200 bg-green-50 text-green-700',
+      };
+    }
+    if (remainingBudget > 0) {
+      return {
+        label: `${formatKrw(remainingBudget)} 잔여`,
+        className: 'border-blue-200 bg-blue-50 text-blue-700',
+      };
+    }
+    return {
+      label: `${formatKrw(Math.abs(remainingBudget))} 초과`,
+      className: 'border-red-200 bg-red-50 text-red-700',
+    };
+  }, [remainingBudget]);
 
   const [bundlePrimary, setBundlePrimary] = useState<string>(() => state.procedures[0]?.id ?? '');
   const [bundleSecondary, setBundleSecondary] = useState<string>(() => state.procedures[1]?.id ?? '');
@@ -399,117 +453,256 @@ const MarketingInsightsSection: React.FC = () => {
     });
   };
 
-  const applyUniformMarketing = useCallback((): boolean => {
-    if (operationalMarketingBudget <= 0 || state.procedures.length === 0) {
-      return false;
-    }
+  const updateManualAllocations = useCallback(
+    (nextMap: Record<string, number>) => {
+      setMarketingSettings({ manualMarketingAllocations: nextMap });
+    },
+    [setMarketingSettings],
+  );
 
-    const baseShare = Math.floor(operationalMarketingBudget / state.procedures.length);
-    let remainder = operationalMarketingBudget - baseShare * state.procedures.length;
+  const applyUniformMarketing = useCallback(
+    (manualOverride?: Record<string, number>) => {
+      if (state.procedures.length === 0) {
+        return false;
+      }
 
-    const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
+      const manualMap = manualOverride ?? manualAllocationMap;
+      const manualSum = Object.values(manualMap).reduce(
+        (acc, value) => acc + (Number.isFinite(value) ? Number(value) : 0),
+        0,
+      );
+      const autoProcedures = state.procedures.filter(procedure => manualMap[procedure.id] === undefined);
+      const budgetForAuto = Math.max(0, distributionBudget - manualSum);
+      const baseShare = autoProcedures.length > 0 ? Math.floor(budgetForAuto / autoProcedures.length) : 0;
+      let remainder = budgetForAuto - baseShare * autoProcedures.length;
 
-    setEditorValues(prev => {
-      const next = { ...prev };
-      state.procedures.forEach(procedure => {
-        const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
-        const previousEditor = prev[procedure.id] ?? {
-          performed: existing && existing.performed > 0 ? String(existing.performed) : '',
-          marketingSpend:
-            existing && existing.marketingSpend != null
-              ? existing.marketingSpend === 0
-                ? '0'
-                : existing.marketingSpend.toLocaleString('ko-KR')
-              : '',
-        };
+      const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
 
-        let allocation = baseShare;
-        if (remainder > 0) {
-          allocation += 1;
-          remainder -= 1;
-        }
+      setEditorValues(prev => {
+        const next = { ...prev };
+        state.procedures.forEach(procedure => {
+          const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
+          const previousEditor = prev[procedure.id] ?? {
+            performed: existing && existing.performed > 0 ? String(existing.performed) : '',
+            marketingSpend:
+              existing && existing.marketingSpend != null
+                ? existing.marketingSpend === 0
+                  ? '0'
+                  : existing.marketingSpend.toLocaleString('ko-KR')
+                : '',
+          };
 
-        next[procedure.id] = {
-          performed: previousEditor.performed,
-          marketingSpend: allocation > 0 ? allocation.toLocaleString('ko-KR') : '0',
-        };
+          const manualValue = manualMap[procedure.id];
+          if (manualValue !== undefined) {
+            next[procedure.id] = {
+              performed: previousEditor.performed,
+              marketingSpend: manualValue === 0 ? '0' : manualValue.toLocaleString('ko-KR'),
+            };
+            return;
+          }
 
-        const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
-        updates.push({
-          procedureId: procedure.id,
-          performed: performedNumeric,
-          marketingSpend: allocation,
+          let allocation = baseShare;
+          if (remainder > 0) {
+            allocation += 1;
+            remainder -= 1;
+          }
+
+          next[procedure.id] = {
+            performed: previousEditor.performed,
+            marketingSpend: allocation === 0 ? '0' : allocation.toLocaleString('ko-KR'),
+          };
+
+          const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
+          updates.push({
+            procedureId: procedure.id,
+            performed: performedNumeric,
+            marketingSpend: allocation,
+          });
+        });
+        return next;
+      });
+
+      updates.forEach(entry => {
+        upsertProcedureActual({
+          procedureId: entry.procedureId,
+          performed: entry.performed,
+          marketingSpend: entry.marketingSpend,
         });
       });
-      return next;
-    });
 
-    updates.forEach(entry => {
-      upsertProcedureActual({
-        procedureId: entry.procedureId,
-        performed: entry.performed,
-        marketingSpend: entry.marketingSpend,
+      return true;
+    },
+    [
+      state.procedures,
+      manualAllocationMap,
+      distributionBudget,
+      state.procedureActuals,
+      upsertProcedureActual,
+    ],
+  );
+
+  const resetUniformMarketing = useCallback(
+    (manualOverride?: Record<string, number>) => {
+      if (state.procedures.length === 0) {
+        setEditorValues({});
+        return;
+      }
+
+      const manualMap = manualOverride ?? manualAllocationMap;
+      const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
+
+      setEditorValues(prev => {
+        const next = { ...prev };
+        state.procedures.forEach(procedure => {
+          const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
+          const previousEditor = prev[procedure.id] ?? {
+            performed: existing && existing.performed > 0 ? String(existing.performed) : '',
+            marketingSpend:
+              existing && existing.marketingSpend != null
+                ? existing.marketingSpend === 0
+                  ? '0'
+                  : existing.marketingSpend.toLocaleString('ko-KR')
+                : '',
+          };
+
+          const manualValue = manualMap[procedure.id];
+          if (manualValue !== undefined) {
+            next[procedure.id] = {
+              performed: previousEditor.performed,
+              marketingSpend: manualValue === 0 ? '0' : manualValue.toLocaleString('ko-KR'),
+            };
+            return;
+          }
+
+          next[procedure.id] = {
+            performed: previousEditor.performed,
+            marketingSpend: '0',
+          };
+
+          const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
+          updates.push({
+            procedureId: procedure.id,
+            performed: performedNumeric,
+            marketingSpend: 0,
+          });
+        });
+        return next;
       });
-    });
-    return true;
-  }, [operationalMarketingBudget, state.procedures, state.procedureActuals, upsertProcedureActual]);
 
-  const resetUniformMarketing = useCallback(() => {
-    if (state.procedures.length === 0) {
-      setEditorValues({});
-      return;
-    }
+      updates.forEach(entry => {
+        upsertProcedureActual({
+          procedureId: entry.procedureId,
+          performed: entry.performed,
+          marketingSpend: entry.marketingSpend,
+        });
+      });
+    },
+    [manualAllocationMap, state.procedures, state.procedureActuals, upsertProcedureActual],
+  );
 
-    const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
+  const enableManualAllocation = useCallback(
+    (procedureId: string, amount: number, performedOverride?: number) => {
+      const sanitizedAmount = Math.max(0, Math.round(Number.isFinite(amount) ? amount : 0));
+      const nextMap = { ...manualAllocationMap, [procedureId]: sanitizedAmount };
+      updateManualAllocations(nextMap);
 
-    setEditorValues(prev => {
-      const next = { ...prev };
-      state.procedures.forEach(procedure => {
-        const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
-        const previousEditor = prev[procedure.id] ?? {
-          performed: existing && existing.performed > 0 ? String(existing.performed) : '',
-          marketingSpend:
-            existing && existing.marketingSpend != null
-              ? existing.marketingSpend === 0
-                ? '0'
-                : existing.marketingSpend.toLocaleString('ko-KR')
-              : '',
+      const existing = state.procedureActuals.find(entry => entry.procedureId === procedureId);
+      const performedValue =
+        typeof performedOverride === 'number' && Number.isFinite(performedOverride) && performedOverride >= 0
+          ? performedOverride
+          : existing?.performed ?? parsePerformedInput(editorValues[procedureId]?.performed ?? '');
+
+      setEditorValues(prev => {
+        const previous = prev[procedureId] ?? {
+          performed: performedValue > 0 ? performedValue.toString() : '',
+          marketingSpend: '',
         };
-
-        next[procedure.id] = {
-          performed: previousEditor.performed,
-          marketingSpend: '0',
+        const performedString =
+          performedValue === 0
+            ? previous.performed.trim().length > 0
+              ? '0'
+              : ''
+            : performedValue.toString();
+        return {
+          ...prev,
+          [procedureId]: {
+            performed: performedString,
+            marketingSpend: sanitizedAmount === 0 ? '0' : sanitizedAmount.toLocaleString('ko-KR'),
+          },
         };
+      });
 
-        const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
-        updates.push({
-          procedureId: procedure.id,
-          performed: performedNumeric,
+      upsertProcedureActual({
+        procedureId,
+        performed: performedValue,
+        marketingSpend: sanitizedAmount,
+      });
+
+      if (isUniformMarketing) {
+        applyUniformMarketing(nextMap);
+      }
+    },
+    [
+      manualAllocationMap,
+      updateManualAllocations,
+      state.procedureActuals,
+      editorValues,
+      upsertProcedureActual,
+      isUniformMarketing,
+      applyUniformMarketing,
+    ],
+  );
+
+  const disableManualAllocation = useCallback(
+    (procedureId: string) => {
+      if (manualAllocationMap[procedureId] === undefined) {
+        return;
+      }
+
+      const nextMap = { ...manualAllocationMap };
+      delete nextMap[procedureId];
+      updateManualAllocations(nextMap);
+
+      if (isUniformMarketing) {
+        applyUniformMarketing(nextMap);
+      } else {
+        setEditorValues(prev => {
+          const previous = prev[procedureId] ?? { performed: '', marketingSpend: '' };
+          return {
+            ...prev,
+            [procedureId]: {
+              performed: previous.performed,
+              marketingSpend: '0',
+            },
+          };
+        });
+
+        const existing = state.procedureActuals.find(entry => entry.procedureId === procedureId);
+        const performedValue = existing?.performed ?? parsePerformedInput(editorValues[procedureId]?.performed ?? '');
+        upsertProcedureActual({
+          procedureId,
+          performed: performedValue,
           marketingSpend: 0,
         });
-      });
-      return next;
-    });
-
-    updates.forEach(entry => {
-      upsertProcedureActual({
-        procedureId: entry.procedureId,
-        performed: entry.performed,
-        marketingSpend: entry.marketingSpend,
-      });
-    });
-  }, [state.procedures, state.procedureActuals, upsertProcedureActual]);
+      }
+    },
+    [
+      manualAllocationMap,
+      updateManualAllocations,
+      isUniformMarketing,
+      applyUniformMarketing,
+      state.procedureActuals,
+      editorValues,
+      upsertProcedureActual,
+    ],
+  );
 
   const handleUniformMarketingToggle = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const checked = event.target.checked;
       if (checked) {
         const applied = applyUniformMarketing();
-        if (applied) {
-          setIsUniformMarketing(true);
-        } else {
-          setIsUniformMarketing(false);
-        }
+        setIsUniformMarketing(Boolean(applied));
       } else {
         resetUniformMarketing();
         setIsUniformMarketing(false);
@@ -519,24 +712,44 @@ const MarketingInsightsSection: React.FC = () => {
   );
 
   useEffect(() => {
-    if (isUniformMarketing && (operationalMarketingBudget <= 0 || state.procedures.length === 0)) {
-      resetUniformMarketing();
-      setIsUniformMarketing(false);
+    if (!isUniformMarketing) {
+      return;
     }
-  }, [isUniformMarketing, operationalMarketingBudget, state.procedures.length, resetUniformMarketing]);
+    applyUniformMarketing(manualAllocationMap);
+  }, [isUniformMarketing, manualAllocationMap, distributionBudget, state.procedures.length, applyUniformMarketing]);
+
+  useEffect(() => {
+    if (isUniformMarketing && state.procedures.length === 0) {
+      setIsUniformMarketing(false);
+      setEditorValues({});
+    }
+  }, [isUniformMarketing, state.procedures.length]);
+
+  const handleManualToggle = useCallback(
+    (procedureId: string, enabled: boolean) => {
+      if (enabled) {
+        const editorValue = editorValues[procedureId];
+        const currentAmount = parseCurrencyInput(editorValue?.marketingSpend ?? '');
+        const performedValue = parsePerformedInput(editorValue?.performed ?? '');
+        enableManualAllocation(procedureId, currentAmount, performedValue);
+      } else {
+        disableManualAllocation(procedureId);
+      }
+    },
+    [editorValues, enableManualAllocation, disableManualAllocation],
+  );
 
   const handleEditorBlur = (procedureId: string) => {
     const current = editorValues[procedureId];
     if (!current) {
       return;
     }
-    const parsedPerformed = Number(current.performed);
-    const performed = Number.isFinite(parsedPerformed) && parsedPerformed >= 0 ? parsedPerformed : 0;
-    const hasMarketingValue = current.marketingSpend.trim().length > 0;
+    const performed = parsePerformedInput(current.performed);
     const marketingNumeric = parseCurrencyInput(current.marketingSpend);
-    const marketingSpend = hasMarketingValue ? marketingNumeric : null;
+    const hasMarketingValue = current.marketingSpend.trim().length > 0;
+    const isManual = manualAllocationMap[procedureId] !== undefined;
 
-    if (performed === 0 && (marketingSpend === null || marketingSpend === 0)) {
+    if (performed === 0 && (marketingNumeric === 0 || !hasMarketingValue)) {
       removeProcedureActual(procedureId);
       setEditorValues(prev => ({
         ...prev,
@@ -545,18 +758,40 @@ const MarketingInsightsSection: React.FC = () => {
           marketingSpend: '',
         },
       }));
+      if (isManual) {
+        const nextMap = { ...manualAllocationMap };
+        delete nextMap[procedureId];
+        updateManualAllocations(nextMap);
+        if (isUniformMarketing) {
+          applyUniformMarketing(nextMap);
+        }
+      }
       return;
     }
+
+    if (isManual) {
+      enableManualAllocation(procedureId, marketingNumeric, performed);
+      return;
+    }
+
+    if (hasMarketingValue && marketingNumeric > 0) {
+      enableManualAllocation(procedureId, marketingNumeric, performed);
+      return;
+    }
+
+    const marketingSpend = hasMarketingValue ? marketingNumeric : null;
 
     upsertProcedureActual({
       procedureId,
       performed,
       marketingSpend,
     });
+
     const formattedMarketing =
       marketingSpend === null ? '' : marketingSpend === 0 ? '0' : formatCurrencyValue(marketingSpend);
     const performedValue =
       performed === 0 ? (current.performed.trim().length > 0 ? '0' : '') : performed.toString();
+
     setEditorValues(prev => ({
       ...prev,
       [procedureId]: {
@@ -568,6 +803,15 @@ const MarketingInsightsSection: React.FC = () => {
 
   const handleClearActual = (procedureId: string) => {
     removeProcedureActual(procedureId);
+    const wasManual = manualAllocationMap[procedureId] !== undefined;
+    if (wasManual) {
+      const nextMap = { ...manualAllocationMap };
+      delete nextMap[procedureId];
+      updateManualAllocations(nextMap);
+      if (isUniformMarketing) {
+        applyUniformMarketing(nextMap);
+      }
+    }
     setEditorValues(prev => ({
       ...prev,
       [procedureId]: {
@@ -1256,12 +1500,12 @@ const MarketingInsightsSection: React.FC = () => {
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-gray-500">
-              운영 세팅 마케팅비:{' '}
-              {operationalMarketingBudget > 0 ? formatKrw(operationalMarketingBudget) : '등록된 값이 없습니다.'}
+              가용 마케팅비:{' '}
+              {distributionBudget > 0 ? formatKrw(distributionBudget) : '등록된 값이 없습니다.'}
             </span>
             <label
               className={`relative inline-flex items-center ${
-                operationalMarketingBudget <= 0 || state.procedures.length === 0
+                distributionBudget <= 0 || state.procedures.length === 0
                   ? 'cursor-not-allowed opacity-60'
                   : 'cursor-pointer'
               }`}
@@ -1271,11 +1515,36 @@ const MarketingInsightsSection: React.FC = () => {
                 className="peer sr-only"
                 checked={isUniformMarketing}
                 onChange={handleUniformMarketingToggle}
-                disabled={operationalMarketingBudget <= 0 || state.procedures.length === 0}
+                disabled={distributionBudget <= 0 || state.procedures.length === 0}
               />
               <span className="relative h-6 w-11 rounded-full bg-gray-200 transition-all peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:bg-blue-600 peer-disabled:bg-gray-200 peer-checked:after:translate-x-full peer-checked:after:border-blue-600 after:absolute after:top-[2px] after:start-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-disabled:after:bg-gray-100" />
               <span className="ms-3 text-sm font-medium text-gray-700">마케팅비 균일 배분</span>
             </label>
+          </div>
+        </div>
+        <div className="px-4 py-3">
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold text-gray-500">총 예산</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">
+                {distributionBudget > 0 ? formatKrw(distributionBudget) : '-'}
+              </p>
+              <p className="text-xs text-gray-500">운영 세팅 기준</p>
+            </div>
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs font-semibold text-blue-600">수동 배분</p>
+              <p className="mt-1 text-sm font-semibold text-blue-900">{formatKrw(manualAllocationSum)}</p>
+              <p className="text-xs text-blue-600">사용자 지정 시술</p>
+            </div>
+            <div className="rounded-md border border-gray-200 bg-white p-3">
+              <p className="text-xs font-semibold text-gray-600">자동 배분</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{formatKrw(autoAllocationSum)}</p>
+              <p className="text-xs text-gray-500">대상 {autoTargetProcedures.length}개 시술</p>
+            </div>
+            <div className={`rounded-md border p-3 text-sm font-semibold ${remainingSummary.className}`}>
+              <p className="text-xs font-semibold">잔여/초과</p>
+              <p className="mt-1">{remainingSummary.label}</p>
+            </div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -1296,6 +1565,14 @@ const MarketingInsightsSection: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {insights.procedures.map(procedure => {
                 const editorValue = editorValues[procedure.id] ?? { performed: '', marketingSpend: '' };
+                const isManual = manualAllocationMap[procedure.id] !== undefined;
+                const badgeLabel = isManual ? '수동 입력' : isUniformMarketing ? '자동 균등' : '미배정';
+                const badgeClass = isManual
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : isUniformMarketing
+                    ? 'border-gray-200 bg-gray-50 text-gray-600'
+                    : 'border-amber-200 bg-amber-50 text-amber-700';
+                const marketingInputDisabled = isUniformMarketing && !isManual;
                 const roas =
                   procedure.marketingSpend != null && procedure.marketingSpend > 0
                     ? procedure.revenue / procedure.marketingSpend
@@ -1316,14 +1593,18 @@ const MarketingInsightsSection: React.FC = () => {
                       />
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editorValue.marketingSpend}
-                        onChange={event => handleEditorChange(procedure.id, 'marketingSpend', event.target.value)}
-                        onBlur={() => handleEditorBlur(procedure.id)}
-                        className="w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editorValue.marketingSpend}
+                          onChange={event => handleEditorChange(procedure.id, 'marketingSpend', event.target.value)}
+                          onBlur={() => handleEditorBlur(procedure.id)}
+                          disabled={marketingInputDisabled}
+                          className={`w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400`}
+                        />
+                        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}>{badgeLabel}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-right text-gray-700">{formatKrw(procedure.revenue)}</td>
                     <td className="px-4 py-2 text-right text-gray-700">{formatKrw(procedure.profit)}</td>
@@ -1331,13 +1612,24 @@ const MarketingInsightsSection: React.FC = () => {
                       {roas != null ? `${formatCount(roas, 2)}배` : '-'}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleClearActual(procedure.id)}
-                        className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:border-gray-300 hover:text-gray-900"
-                      >
-                        초기화
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <label className="inline-flex items-center gap-1 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={isManual}
+                            onChange={event => handleManualToggle(procedure.id, event.target.checked)}
+                          />
+                          <span>수동 입력</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleClearActual(procedure.id)}
+                          className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:border-gray-300 hover:text-gray-900"
+                        >
+                          초기화
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

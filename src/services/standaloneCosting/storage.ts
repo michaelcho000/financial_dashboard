@@ -25,7 +25,7 @@ export interface LoadedDraftResult {
 type PartialState = Partial<StandaloneCostingState>;
 
 const API_PATH = '/api/standalone-costing';
-const CURRENT_VERSION = 9;
+const CURRENT_VERSION = 10;
 const SUPABASE_TABLE = 'standalone_costing_state';
 const SUPABASE_ROW_ID = 'standalone-costing-primary';
 
@@ -525,14 +525,35 @@ const normalizeStaffList = (staff: StaffProfile[] | undefined): StaffProfile[] =
   return staff.map(normalizeStaffProfile);
 };
 
+const sanitizeMarketingAllocationMap = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  const result: Record<string, number> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    if (typeof key !== 'string' || key.trim().length === 0) {
+      return;
+    }
+    const normalized = sanitizeOptionalNonNegativeNumber(raw);
+    if (normalized !== null) {
+      result[key] = normalized;
+    }
+  });
+  return result;
+};
+
 const normalizeMarketingSettings = (
   value: Partial<MarketingSettings> | undefined,
 ): MarketingSettings => {
   const targetRevenue = sanitizeOptionalNonNegativeNumber(value?.targetRevenue);
   const manualMarketingBudget = sanitizeOptionalNonNegativeNumber(value?.manualMarketingBudget);
+  const manualMarketingAllocations = sanitizeMarketingAllocationMap(
+    (value as { manualMarketingAllocations?: unknown })?.manualMarketingAllocations,
+  );
   return {
     targetRevenue,
     manualMarketingBudget,
+    manualMarketingAllocations,
   };
 };
 

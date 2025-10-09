@@ -137,12 +137,32 @@ const sanitizeOptionalNonNegative = (value: unknown): number | null => {
   return null;
 };
 
+const sanitizeMarketingAllocationMap = (input: unknown): Record<string, number> => {
+  if (!input || typeof input !== 'object') {
+    return {};
+  }
+  const entries: Record<string, number> = {};
+  Object.entries(input as Record<string, unknown>).forEach(([key, raw]) => {
+    if (typeof key !== 'string' || key.trim().length === 0) {
+      return;
+    }
+    const normalized = sanitizeOptionalNonNegative(raw);
+    if (normalized !== null) {
+      entries[key] = normalized;
+    }
+  });
+  return entries;
+};
+
 const normalizeMarketingSettings = (
   settings: Partial<MarketingSettings> | undefined,
 ): MarketingSettings => {
   return {
     targetRevenue: sanitizeOptionalNonNegative(settings?.targetRevenue),
     manualMarketingBudget: sanitizeOptionalNonNegative(settings?.manualMarketingBudget),
+    manualMarketingAllocations: sanitizeMarketingAllocationMap(
+      settings ? (settings as { manualMarketingAllocations?: unknown }).manualMarketingAllocations : undefined,
+    ),
   };
 };
 
@@ -498,17 +518,18 @@ const buildInitialState = (): StandaloneCostingState => {
     useEquipmentHierarchy: false,
     staff: [],
     phaseStatuses: buildDefaultPhaseStatuses(),
-  materials: [],
-  fixedCosts: [],
-  procedures: [],
-  breakdowns: [],
-  marketingSettings: {
-    targetRevenue: null,
-    manualMarketingBudget: null,
-  },
-  procedureActuals: [],
-  lastSavedAt: null,
-};
+    materials: [],
+    fixedCosts: [],
+    procedures: [],
+    breakdowns: [],
+    marketingSettings: {
+      targetRevenue: null,
+      manualMarketingBudget: null,
+      manualMarketingAllocations: {},
+    },
+    procedureActuals: [],
+    lastSavedAt: null,
+  };
   return seedPhaseChecksums(base);
 };
 

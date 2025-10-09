@@ -148,6 +148,7 @@ export interface ProcedureActualPerformance {
 export interface MarketingSettings {
   targetRevenue: number | null;
   manualMarketingBudget: number | null;
+  manualMarketingAllocations: Record<string, number>;
 }
 
 export interface StandaloneCostingState {
