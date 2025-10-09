@@ -1108,7 +1108,7 @@ const MarketingInsightsSection: React.FC = () => {
         <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
           <h3 className="text-sm font-semibold text-gray-900">시술 실적 입력</h3>
           <p className="mt-1 text-xs text-gray-500">
-            이번 달 실제 시술 건수와 마케팅비를 입력하세요. 데이터를 저장하면 Supabase에 자동으로 반영됩니다.
+            이번 달 실제 시술 건수와 마케팅비를 입력하세요. 저장하면 마케팅 인사이트에 바로 반영됩니다.
           </p>
         </div>
         <div className="overflow-x-auto">
