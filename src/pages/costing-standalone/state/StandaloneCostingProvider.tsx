@@ -39,7 +39,8 @@ type StandaloneCostingAction =
   | { type: 'UPSERT_PROCEDURE_ACTUAL'; payload: ProcedureActualPerformance }
   | { type: 'REMOVE_PROCEDURE_ACTUAL'; payload: { procedureId: string } }
   | { type: 'SET_MARKETING_SETTINGS'; payload: Partial<MarketingSettings> }
-  | { type: 'MARK_PHASES_SAVED'; payload: { phases: Partial<Record<CostingPhaseId, CostingPhaseStatus>>; timestamp: string } };
+  | { type: 'MARK_PHASES_SAVED'; payload: { phases: Partial<Record<CostingPhaseId, CostingPhaseStatus>>; timestamp: string } }
+  | { type: 'SET_RESULTS_INCLUDE_UNALLOCATED_LABOR'; payload: boolean };
 
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
 const MINUTES_IN_HOUR = 60;
@@ -549,6 +550,7 @@ const buildInitialState = (): StandaloneCostingState => {
     },
     procedureActuals: [],
     lastSavedAt: null,
+    resultsIncludeUnallocatedLabor: false,
   };
   return seedPhaseChecksums(base);
 };
@@ -595,6 +597,7 @@ const recalcBreakdowns = (state: StandaloneCostingState, touchTimestamp = true):
     breakdowns,
     phaseStatuses: normalizePhaseStatuses(state.phaseStatuses),
     lastSavedAt: touchTimestamp ? new Date().toISOString() : state.lastSavedAt,
+    resultsIncludeUnallocatedLabor: Boolean(state.resultsIncludeUnallocatedLabor),
   };
 };
 
@@ -756,6 +759,14 @@ const reducer = (state: StandaloneCostingState, action: StandaloneCostingAction)
     }
     case 'SET_BREAKDOWNS':
       return recalcBreakdowns(state);
+    case 'SET_RESULTS_INCLUDE_UNALLOCATED_LABOR':
+      if (state.resultsIncludeUnallocatedLabor === action.payload) {
+        return state;
+      }
+      return {
+        ...state,
+        resultsIncludeUnallocatedLabor: action.payload,
+      };
     case 'MARK_PHASES_SAVED': {
       const nextStatuses = { ...state.phaseStatuses };
       Object.entries(action.payload.phases).forEach(([phaseId, status]) => {
@@ -807,6 +818,7 @@ interface StandaloneCostingContextValue {
   upsertProcedureActual: (payload: ProcedureActualPerformance) => void;
   removeProcedureActual: (procedureId: string) => void;
   setMarketingSettings: (payload: Partial<MarketingSettings>) => void;
+  setResultsIncludeUnallocatedLabor: (include: boolean) => void;
   resetAll: () => void;
   hydrated: boolean;
   openProcedureEditor: (procedureId?: string | null) => void;
@@ -953,6 +965,10 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     dispatch({ type: 'SET_MARKETING_SETTINGS', payload });
   }, []);
 
+  const setResultsIncludeUnallocatedLabor = useCallback((include: boolean) => {
+    dispatch({ type: 'SET_RESULTS_INCLUDE_UNALLOCATED_LABOR', payload: include });
+  }, []);
+
   const resetAll = useCallback(() => {
     const reset = async () => {
       await clearDraft();
@@ -1003,6 +1019,7 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     upsertProcedureActual,
     removeProcedureActual,
     setMarketingSettings,
+    setResultsIncludeUnallocatedLabor,
     resetAll,
     hydrated,
     openProcedureEditor,
@@ -1027,6 +1044,7 @@ export const StandaloneCostingProvider: React.FC<{ children: React.ReactNode }> 
     upsertProcedureActual,
     removeProcedureActual,
     setMarketingSettings,
+    setResultsIncludeUnallocatedLabor,
     resetAll,
     hydrated,
     openProcedureEditor,

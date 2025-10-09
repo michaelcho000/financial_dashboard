@@ -164,6 +164,7 @@ export interface StandaloneCostingState {
   procedureActuals: ProcedureActualPerformance[];
   marketingSettings: MarketingSettings;
   lastSavedAt: string | null;
+  resultsIncludeUnallocatedLabor: boolean;
 }
 
 export interface StandaloneCostingDraft {

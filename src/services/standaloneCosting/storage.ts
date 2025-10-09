@@ -600,6 +600,7 @@ const ensureStateShape = (state: PartialState): StandaloneCostingState => ({
   procedureActuals: normalizeProcedureActuals(state.procedureActuals as Partial<ProcedureActualPerformance>[] | undefined),
   marketingSettings: normalizeMarketingSettings(state.marketingSettings as Partial<MarketingSettings> | undefined),
   lastSavedAt: state.lastSavedAt ?? null,
+  resultsIncludeUnallocatedLabor: Boolean(state.resultsIncludeUnallocatedLabor),
 });
 
 const normalizeState = (state: PartialState): StandaloneCostingState => {

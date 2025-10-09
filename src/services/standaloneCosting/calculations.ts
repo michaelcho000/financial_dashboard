@@ -5,6 +5,7 @@
   MaterialItem,
   MaterialUsage,
   OperationalConfig,
+  ProcedureActualPerformance,
   ProcedureCostBreakdown,
   ProcedureFormValues,
   StaffAssignment,
@@ -312,4 +313,150 @@ export const buildAllBreakdowns = (procedures: ProcedureFormValues[], context: {
   operational: OperationalConfig;
 }): ProcedureCostBreakdown[] => {
   return procedures.map(procedure => buildProcedureBreakdown(procedure, context));
+};
+
+export interface LaborCostAllocationSummary {
+  totalPayroll: number;
+  allocatedLaborCost: number;
+  unallocatedLaborCost: number;
+  allocationRate: number;
+}
+
+export const calculateLaborCostAllocation = (context: {
+  staff: StaffProfile[];
+  breakdowns: ProcedureCostBreakdown[];
+  actuals: ProcedureActualPerformance[];
+}): LaborCostAllocationSummary => {
+  const totalPayroll = context.staff.reduce(
+    (sum, profile) => sum + (Number.isFinite(profile.monthlySalary) ? profile.monthlySalary : 0),
+    0,
+  );
+
+  if (!context.actuals.length || !context.breakdowns.length) {
+    return {
+      totalPayroll,
+      allocatedLaborCost: 0,
+      unallocatedLaborCost: Math.max(0, totalPayroll),
+      allocationRate: 0,
+    };
+  }
+
+  const breakdownMap = new Map(context.breakdowns.map(item => [item.procedureId, item]));
+  const allocatedLaborCost = context.actuals.reduce((sum, actual) => {
+    const breakdown = breakdownMap.get(actual.procedureId);
+    if (!breakdown) {
+      return sum;
+    }
+    const performed = Number.isFinite(actual.performed) ? actual.performed : 0;
+    if (performed <= 0) {
+      return sum;
+    }
+    return sum + breakdown.directLaborCost * performed;
+  }, 0);
+
+  const unallocatedLaborCost = Math.max(0, totalPayroll - allocatedLaborCost);
+  const allocationRate = totalPayroll > 0 ? allocatedLaborCost / totalPayroll : 0;
+
+  return {
+    totalPayroll,
+    allocatedLaborCost,
+    unallocatedLaborCost,
+    allocationRate,
+  };
+};
+
+export interface UnallocatedLaborAllocationEntry {
+  procedureId: string;
+  additionalUnitCost: number;
+  additionalTotalCost: number;
+  totalActualMinutes: number;
+}
+
+export interface UnallocatedLaborAllocationResult {
+  perMinuteCost: number;
+  totalActualMinutes: number;
+  entries: UnallocatedLaborAllocationEntry[];
+}
+
+const getProcedureMinutesPerUnit = (procedure: ProcedureFormValues): number => {
+  if (Number.isFinite(procedure.totalMinutes) && procedure.totalMinutes > 0) {
+    return procedure.totalMinutes;
+  }
+  if (Number.isFinite(procedure.treatmentMinutes) && procedure.treatmentMinutes > 0) {
+    return procedure.treatmentMinutes;
+  }
+  return 0;
+};
+
+export const allocateUnallocatedLaborCost = (context: {
+  procedures: ProcedureFormValues[];
+  actuals: ProcedureActualPerformance[];
+  unallocatedLaborCost: number;
+}): UnallocatedLaborAllocationResult => {
+  const { unallocatedLaborCost } = context;
+  if (!Number.isFinite(unallocatedLaborCost) || unallocatedLaborCost <= 0) {
+    return {
+      perMinuteCost: 0,
+      totalActualMinutes: 0,
+      entries: [],
+    };
+  }
+
+  const procedureMap = new Map(context.procedures.map(item => [item.id, item]));
+  const minutesByProcedure = new Map<string, number>();
+
+  let totalActualMinutes = 0;
+  context.actuals.forEach(actual => {
+    const procedure = procedureMap.get(actual.procedureId);
+    if (!procedure) {
+      return;
+    }
+    const performed = Number.isFinite(actual.performed) ? actual.performed : 0;
+    if (performed <= 0) {
+      return;
+    }
+    const minutesPerUnit = getProcedureMinutesPerUnit(procedure);
+    if (!minutesPerUnit) {
+      return;
+    }
+    const totalMinutes = minutesPerUnit * performed;
+    if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
+      return;
+    }
+    minutesByProcedure.set(actual.procedureId, (minutesByProcedure.get(actual.procedureId) ?? 0) + totalMinutes);
+    totalActualMinutes += totalMinutes;
+  });
+
+  if (totalActualMinutes <= 0) {
+    return {
+      perMinuteCost: 0,
+      totalActualMinutes: 0,
+      entries: [],
+    };
+  }
+
+  const perMinuteCost = unallocatedLaborCost / totalActualMinutes;
+  const entries: UnallocatedLaborAllocationEntry[] = [];
+
+  minutesByProcedure.forEach((procedureMinutes, procedureId) => {
+    const procedure = procedureMap.get(procedureId);
+    if (!procedure) {
+      return;
+    }
+    const minutesPerUnit = getProcedureMinutesPerUnit(procedure);
+    const additionalUnitCost = minutesPerUnit ? perMinuteCost * minutesPerUnit : 0;
+    const additionalTotalCost = perMinuteCost * procedureMinutes;
+    entries.push({
+      procedureId,
+      additionalUnitCost,
+      additionalTotalCost,
+      totalActualMinutes: procedureMinutes,
+    });
+  });
+
+  return {
+    perMinuteCost,
+    totalActualMinutes,
+    entries,
+  };
 };

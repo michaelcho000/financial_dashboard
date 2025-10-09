@@ -7,6 +7,7 @@ import {
   StandaloneCostingState,
   StaffProfile,
 } from '../../../services/standaloneCosting/types';
+import { calculateLaborCostAllocation } from '../../../services/standaloneCosting/calculations';
 
 const MINUTES_IN_HOUR = 60;
 const DEFAULT_WEEKS_PER_MONTH = 4.345;
@@ -175,6 +176,10 @@ export interface MarketingInsightsResult {
     averageLaborCostPerMinute: number;
     totalFixedCostAllocatedActual: number;
     averageFixedCostPerProcedure: number;
+    totalStaffPayroll: number;
+    allocatedLaborCost: number;
+    unallocatedLaborCost: number;
+    laborAllocationRate: number;
     topMarginProcedures: ProcedureInsight[];
     lowMarginProcedures: ProcedureInsight[];
     growthCandidates: ProcedureInsight[];
@@ -402,6 +407,11 @@ export const useMarketingInsights = (state: StandaloneCostingState): MarketingIn
     const averageMarginRate = procedures.length
       ? procedures.reduce((acc, item) => acc + item.marginRate, 0) / procedures.length
       : 0;
+    const laborAllocation = calculateLaborCostAllocation({
+      staff: state.staff,
+      breakdowns: state.breakdowns,
+      actuals: state.procedureActuals,
+    });
 
     const enrichedProcedures = procedures.map(proc => ({
       ...proc,
@@ -452,6 +462,10 @@ export const useMarketingInsights = (state: StandaloneCostingState): MarketingIn
         averageLaborCostPerMinute,
         totalFixedCostAllocatedActual,
         averageFixedCostPerProcedure,
+        totalStaffPayroll: laborAllocation.totalPayroll,
+        allocatedLaborCost: laborAllocation.allocatedLaborCost,
+        unallocatedLaborCost: laborAllocation.unallocatedLaborCost,
+        laborAllocationRate: laborAllocation.allocationRate,
         topMarginProcedures,
         lowMarginProcedures,
         growthCandidates,

@@ -1174,6 +1174,31 @@ const MarketingInsightsSection: React.FC = () => {
 
   const operationsContent = (
     <div className="space-y-6">
+      <div className="grid gap-3 md:grid-cols-3">
+        <StatCard
+          title="월 총 인건비"
+          value={formatKrw(insights.summary.totalStaffPayroll)}
+          description="인력 관리에 등록된 월 급여 총액입니다."
+          variant="info"
+        />
+        <StatCard
+          title="시술 배분 인건비"
+          value={formatKrw(insights.summary.allocatedLaborCost)}
+          description={`실적 기준 배분된 직접 인건비 · 할당률 ${formatPercentage(insights.summary.laborAllocationRate * 100)}`}
+          variant="info"
+        />
+        <StatCard
+          title="미배분 인건비"
+          value={formatKrw(insights.summary.unallocatedLaborCost)}
+          description={
+            insights.summary.unallocatedLaborCost > 0
+              ? '해당 금액은 아직 시술 비용에 반영되지 않았습니다. 인력 배치나 프로세스를 재검토하세요.'
+              : '실적 기준으로 월 인건비가 모두 배분되었습니다.'
+          }
+          variant={insights.summary.unallocatedLaborCost > 0 ? 'warning' : 'info'}
+        />
+      </div>
+
       <div className="rounded-lg border border-gray-200 p-5">
         <h3 className="text-sm font-semibold text-gray-900">인력 가동률</h3>
         <p className="mt-1 text-xs text-gray-500">각 스태프의 월 가용 시간 대비 실제 소요 시간을 비교합니다.</p>
