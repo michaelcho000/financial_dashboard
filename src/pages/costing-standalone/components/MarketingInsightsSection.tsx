@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStandaloneCosting } from '../state/StandaloneCostingProvider';
 import { useMarketingInsights } from '../hooks/useMarketingInsights';
 import { formatKrw, formatPercentage } from '../../../utils/formatters';
@@ -30,14 +30,6 @@ const parsePerformedInput = (value?: string): number => {
   }
   return numeric;
 };
-
-interface MarketingValueSnapshot {
-  editorPerformed: string;
-  editorMarketing: string;
-  hadActual: boolean;
-  actualPerformed: number;
-  actualMarketing: number | null;
-}
 
 const parseCurrencyInput = (value: string): number => {
   if (!value) {
@@ -152,9 +144,15 @@ const MarketingInsightsSection: React.FC = () => {
     const map: Record<string, { performed: string; marketingSpend: string }> = {};
     state.procedures.forEach(procedure => {
       const actual = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
+      const marketingDisplay =
+        actual?.marketingSpend != null
+          ? actual.marketingSpend === 0
+            ? '0'
+            : actual.marketingSpend.toLocaleString('ko-KR')
+          : '';
       map[procedure.id] = {
         performed: actual && actual.performed > 0 ? String(actual.performed) : '',
-        marketingSpend: formatCurrencyValue(actual?.marketingSpend ?? null),
+        marketingSpend: marketingDisplay,
       };
     });
     return map;
@@ -164,7 +162,6 @@ const MarketingInsightsSection: React.FC = () => {
     initialEditorValues,
   );
   const [isUniformMarketing, setIsUniformMarketing] = useState<boolean>(false);
-  const previousMarketingSnapshotRef = useRef<Record<string, MarketingValueSnapshot> | null>(null);
 
   const [bundlePrimary, setBundlePrimary] = useState<string>(() => state.procedures[0]?.id ?? '');
   const [bundleSecondary, setBundleSecondary] = useState<string>(() => state.procedures[1]?.id ?? '');
@@ -410,7 +407,6 @@ const MarketingInsightsSection: React.FC = () => {
     const baseShare = Math.floor(operationalMarketingBudget / state.procedures.length);
     let remainder = operationalMarketingBudget - baseShare * state.procedures.length;
 
-    const snapshot: Record<string, MarketingValueSnapshot> = {};
     const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
 
     setEditorValues(prev => {
@@ -425,14 +421,6 @@ const MarketingInsightsSection: React.FC = () => {
                 ? '0'
                 : existing.marketingSpend.toLocaleString('ko-KR')
               : '',
-        };
-
-        snapshot[procedure.id] = {
-          editorPerformed: previousEditor.performed,
-          editorMarketing: previousEditor.marketingSpend,
-          hadActual: Boolean(existing),
-          actualPerformed: existing?.performed ?? 0,
-          actualMarketing: existing?.marketingSpend ?? null,
         };
 
         let allocation = baseShare;
@@ -456,7 +444,6 @@ const MarketingInsightsSection: React.FC = () => {
       return next;
     });
 
-    previousMarketingSnapshotRef.current = snapshot;
     updates.forEach(entry => {
       upsertProcedureActual({
         procedureId: entry.procedureId,
@@ -467,49 +454,51 @@ const MarketingInsightsSection: React.FC = () => {
     return true;
   }, [operationalMarketingBudget, state.procedures, state.procedureActuals, upsertProcedureActual]);
 
-  const revertUniformMarketing = useCallback(() => {
-    const snapshot = previousMarketingSnapshotRef.current;
-    if (!snapshot) {
+  const resetUniformMarketing = useCallback(() => {
+    if (state.procedures.length === 0) {
+      setEditorValues({});
       return;
     }
-    previousMarketingSnapshotRef.current = null;
 
-    const restores: Array<{ procedureId: string; performed: number; marketingSpend: number | null }> = [];
-    const removals: string[] = [];
+    const updates: Array<{ procedureId: string; performed: number; marketingSpend: number }> = [];
 
     setEditorValues(prev => {
       const next = { ...prev };
       state.procedures.forEach(procedure => {
-        const saved = snapshot[procedure.id];
-        if (!saved) {
-          return;
-        }
-        next[procedure.id] = {
-          performed: saved.editorPerformed,
-          marketingSpend: saved.editorMarketing,
+        const existing = state.procedureActuals.find(entry => entry.procedureId === procedure.id);
+        const previousEditor = prev[procedure.id] ?? {
+          performed: existing && existing.performed > 0 ? String(existing.performed) : '',
+          marketingSpend:
+            existing && existing.marketingSpend != null
+              ? existing.marketingSpend === 0
+                ? '0'
+                : existing.marketingSpend.toLocaleString('ko-KR')
+              : '',
         };
-        if (saved.hadActual) {
-          restores.push({
-            procedureId: procedure.id,
-            performed: saved.actualPerformed,
-            marketingSpend: saved.actualMarketing ?? null,
-          });
-        } else {
-          removals.push(procedure.id);
-        }
+
+        next[procedure.id] = {
+          performed: previousEditor.performed,
+          marketingSpend: '0',
+        };
+
+        const performedNumeric = existing?.performed ?? parsePerformedInput(previousEditor.performed);
+        updates.push({
+          procedureId: procedure.id,
+          performed: performedNumeric,
+          marketingSpend: 0,
+        });
       });
       return next;
     });
 
-    restores.forEach(entry => {
+    updates.forEach(entry => {
       upsertProcedureActual({
         procedureId: entry.procedureId,
         performed: entry.performed,
-        marketingSpend: entry.marketingSpend ?? null,
+        marketingSpend: entry.marketingSpend,
       });
     });
-    removals.forEach(id => removeProcedureActual(id));
-  }, [removeProcedureActual, state.procedures, upsertProcedureActual]);
+  }, [state.procedures, state.procedureActuals, upsertProcedureActual]);
 
   const handleUniformMarketingToggle = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -522,19 +511,19 @@ const MarketingInsightsSection: React.FC = () => {
           setIsUniformMarketing(false);
         }
       } else {
-        revertUniformMarketing();
+        resetUniformMarketing();
         setIsUniformMarketing(false);
       }
     },
-    [applyUniformMarketing, revertUniformMarketing],
+    [applyUniformMarketing, resetUniformMarketing],
   );
 
   useEffect(() => {
     if (isUniformMarketing && (operationalMarketingBudget <= 0 || state.procedures.length === 0)) {
-      revertUniformMarketing();
+      resetUniformMarketing();
       setIsUniformMarketing(false);
     }
-  }, [isUniformMarketing, operationalMarketingBudget, state.procedures.length, revertUniformMarketing]);
+  }, [isUniformMarketing, operationalMarketingBudget, state.procedures.length, resetUniformMarketing]);
 
   const handleEditorBlur = (procedureId: string) => {
     const current = editorValues[procedureId];
